@@ -259,7 +259,6 @@ function FirstOrder(p::StreamingParams)
 
     @create_dual(Y,1,p.γ,p.H₀,hankelh1)
 
-
     K = 1
     Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
     W₁ = D²(Ψ₁,K)  # note that this is actually the negative of the vorticity. We will account for this when we evaluate it.
@@ -322,6 +321,7 @@ end
 function SecondOrderMean(p::StreamingParams)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
+  @create_dual(Y,1,p.γ,p.H₀,hankelh1)
   @create_dual(Z,2,p.γ,p.H₀,hankelh1)
 
 
@@ -408,6 +408,7 @@ end
 function SecondOrder(p::StreamingParams)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
+  @create_dual(Y,1,p.γ,p.H₀,hankelh1)
   @create_dual(Z,2,p.γ,p.H₀,hankelh1)
 
   @create_dual(H11,1,p.λ,1,hankelh1)
