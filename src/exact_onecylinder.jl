@@ -55,6 +55,10 @@ struct ComplexFunc{FT}
     fcn::FT
 end
 
+function Base.show(io::IO, f::ComplexFunc)
+        println(io, "Complex function")
+end
+
 (f::ComplexFunc)(x) = f.fcn(x)
 
 macro create_dual(f,nu,c,d,hankel)
