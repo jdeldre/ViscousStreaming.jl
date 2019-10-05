@@ -3,7 +3,7 @@ import Base: *, +
 
 using Interpolations
 #using FastGaussQuadrature
-using LinearAlgebra
+#using LinearAlgebra
 using SpecialFunctions
 using ForwardDiff
 using DiffRules
