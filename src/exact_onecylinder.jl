@@ -222,14 +222,7 @@ end
 @extend_H(hankelh2)
 
 
-@create_dual(X,0,p.γ,p.H₀,hankelh1)
-@create_dual(Y,1,p.γ,p.H₀,hankelh1)
-@create_dual(Z,2,p.γ,p.H₀,hankelh1)
 
-@create_dual(H11,1,p.λ,1,hankelh1)
-@create_dual(H12,1,p.λ,1,hankelh2)
-@create_dual(H21,2,p.λ,1,hankelh1)
-@create_dual(H22,2,p.λ,1,hankelh2)
 
 abstract type Order end
 abstract type First <: Order end
@@ -259,6 +252,10 @@ struct FirstOrder
 end
 
 function FirstOrder(p::StreamingParams)
+
+    @create_dual(Y,1,p.γ,p.H₀,hankelh1)
+
+
     K = 1
     Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
     W₁ = D²(Ψ₁,K)  # note that this is actually the negative of the vorticity. We will account for this when we evaluate it.
@@ -319,6 +316,11 @@ struct SecondOrderMean
 end
 
 function SecondOrderMean(p::StreamingParams)
+
+  @create_dual(X,0,p.γ,p.H₀,hankelh1)
+  @create_dual(Z,2,p.γ,p.H₀,hankelh1)
+
+
   K = 2
   fakefact = 1
   #f₀ = ComplexFunc(r -> -0.5*p.γ²*p.Re*(0.5*(p.C*conj(X(r))-conj(p.C)*X(r))/r^2 + X(r)*conj(Z(r)) - conj(X(r))*Z(r)))
@@ -400,6 +402,15 @@ struct SecondOrder
 end
 
 function SecondOrder(p::StreamingParams)
+
+  @create_dual(X,0,p.γ,p.H₀,hankelh1)
+  @create_dual(Z,2,p.γ,p.H₀,hankelh1)
+
+  @create_dual(H11,1,p.λ,1,hankelh1)
+  @create_dual(H12,1,p.λ,1,hankelh2)
+  @create_dual(H21,2,p.λ,1,hankelh1)
+  @create_dual(H22,2,p.λ,1,hankelh2)
+
   K = 2
   fakefact = 1
   g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
