@@ -347,6 +347,8 @@ function SecondOrderMean(p::StreamingParams)
 
   # for verifying boundary conditions
   dΨs₂ = ComplexFunc(r -> derivative(Ψs₂,r))
+  Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
+  W₁ = D²(Ψ₁,K)
   bcresids1 = Ψs₂(1)
   bcresids2 = real(dΨs₂(1) - 0.25im*W₁(1))
 
