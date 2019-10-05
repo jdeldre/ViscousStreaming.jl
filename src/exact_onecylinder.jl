@@ -11,7 +11,8 @@ using DiffRules
 import ForwardDiff:value,partials,derivative,extract_derivative
 
 
-export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean
+export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean,
+        uvelocity,vvelocity
 
 """
     StreamingParams(ϵ,Re)
@@ -318,7 +319,7 @@ struct SecondOrderMean
     Uθ₂ :: ComplexFunc
 end
 
-function SecondOrderMean(p::StreamingParams)
+function SecondOrderMean(p::StreamingParams;n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -331,10 +332,10 @@ function SecondOrderMean(p::StreamingParams)
   f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
 
   f̃₀ = ComplexFunc(r -> f₀(r) - 0.5*p.γ²*p.Re*(-0.5*conj(Z(r))+0.5*Z(r)))
-  I⁻¹ = ComplexIntegral(r->f₀(r)/r,1,Inf,length=100000)
-  I¹ = ComplexIntegral(r->f₀(r)*r,1,Inf,length=100000)
-  I³ = ComplexIntegral(r->f₀(r)*r^3,1,20,length=400000)
-  I⁵ = ComplexIntegral(r->f₀(r)*r^5,1,20,length=400000)
+  I⁻¹ = ComplexIntegral(r->f₀(r)/r,1,Inf,length=n1inf)
+  I¹ = ComplexIntegral(r->f₀(r)*r,1,Inf,length=n1inf)
+  I³ = ComplexIntegral(r->f₀(r)*r^3,1,20,length=n120)
+  I⁵ = ComplexIntegral(r->f₀(r)*r^5,1,20,length=n120)
   Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 - fakefact*0.25im*p.γ*Y(1) +
   1/r^2*(-I⁵(r)/48-I⁻¹(1)/24+I¹(1)/16 + fakefact*0.25im*p.γ*Y(1)))
   Ws₂ = D²(Ψs₂,K)
@@ -407,7 +408,7 @@ struct SecondOrder
     Uθ₂ :: ComplexFunc
 end
 
-function SecondOrder(p::StreamingParams)
+function SecondOrder(p::StreamingParams;n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -427,10 +428,10 @@ function SecondOrder(p::StreamingParams)
 
   Kλ = ComplexFunc(r -> H11(1)*H22(r) - H12(1)*H21(r))
 
-  IKgr = ComplexIntegral(r -> r*Kλ(r)*g₀(r),1,20,length=400000)
-  IH21gr = ComplexIntegral(r -> r*H21(r)*g₀(r),1,Inf,length=100000)
-  Igr⁻¹ = ComplexIntegral(r -> g₀(r)/r,1,Inf,length=100000)
-  Igr³ = ComplexIntegral(r -> g₀(r)*r^3,1,20,length=400000)
+  IKgr = ComplexIntegral(r -> r*Kλ(r)*g₀(r),1,20,length=n120)
+  IH21gr = ComplexIntegral(r -> r*H21(r)*g₀(r),1,Inf,length=n1inf)
+  Igr⁻¹ = ComplexIntegral(r -> g₀(r)/r,1,Inf,length=n1inf)
+  Igr³ = ComplexIntegral(r -> g₀(r)*r^3,1,20,length=n120)
 
   Ig¹ = ComplexFunc(r -> 0.25im*π/(p.λ²*H11(1))*IKgr(r)*H21(r))
   Ig² = ComplexFunc(r -> 0.25im*π/(p.λ²*H11(1))*IH21gr(r)*Kλ(r))
