@@ -359,7 +359,7 @@ function SecondOrderMean(p::StreamingParams)
 end
 
 function Base.show(io::IO, s::SecondOrderMean)
-        println(io, "Second-order mean analytical streaming flow solution for")
+        println(io, "Second-order mean part of analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
 
@@ -458,6 +458,10 @@ function SecondOrder(p::StreamingParams)
   return SecondOrder(K,p,Ψ₂,W₂,Ur₂, Uθ₂)
 end
 
+function Base.show(io::IO, s::SecondOrder)
+        println(io, "Second-order oscillatory part of analytical streaming flow solution for")
+        println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
+end
 
 function vorticity(x,y,t,s::SecondOrder)
     r = sqrt(x^2+y^2)
