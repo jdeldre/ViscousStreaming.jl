@@ -10,6 +10,8 @@ using DiffRules
 
 import ForwardDiff:value,partials,derivative,extract_derivative
 
+import ViscousFlow:curl,vorticity,streamfunction
+
 
 export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean, AnalyticalStreaming,
         uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
