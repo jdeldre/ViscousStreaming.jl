@@ -399,6 +399,11 @@ function streamfunction(x,y,s::SecondOrderMean)
     return real(s.Ψ₂(r))*sin2eval
 end
 
+vorticity(x,y,t,s::SecondOrderMean) = vorticity(x,y,s::SecondOrderMean)
+uvelocity(x,y,t,s::SecondOrderMean) = uvelocity(x,y,s::SecondOrderMean)
+vvelocity(x,y,t,s::SecondOrderMean) = vvelocity(x,y,s::SecondOrderMean)
+streamfunction(x,y,t,s::SecondOrderMean) = streamfunction(x,y,s::SecondOrderMean)
+
 
 # second order unsteady
 struct SecondOrder <: Analytical
