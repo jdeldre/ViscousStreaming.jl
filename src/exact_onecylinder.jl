@@ -505,7 +505,7 @@ struct AnalyticalStreaming
   s2 :: SecondOrder
 end
 
-AnalyticalStreaming(p) = AnalyticalStreaming(FirstOrder(p),SecondOrderMean(p),SecondOrder(p))
+AnalyticalStreaming(p) = AnalyticalStreaming(p,FirstOrder(p),SecondOrderMean(p),SecondOrder(p))
 
 function Base.show(io::IO, s::AnalyticalStreaming)
         println(io, "Analytical streaming flow solution for")
