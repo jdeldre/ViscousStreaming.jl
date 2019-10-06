@@ -6,6 +6,7 @@ module Streaming
 
   include("fields.jl")
   include("exact_onecylinder.jl")
+  include("solver.jl")
 
 
 end # module
