@@ -19,7 +19,9 @@ setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
 initialize_state(sys) = (Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),[0.0,0.0])
 initialize_force(sys) = (VectorData(sys.X̃),VectorData(sys.X̃),Vector{Float64}(),Vector{Float64}())
 
-function initialize_solver(Re,Δx,xlim,ylim,Δt,coords,motion::RigidBodyMotions.RigidBodyMotion;ddftype=Fields.Goza)
+function initialize_solver(Re,Δx,xlim,ylim,Δt,body::Body,motion::RigidBodyMotions.RigidBodyMotion;ddftype=Fields.Goza)
+
+  coords = VectorData(body.x,body.y)
 
   sys = setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=ddftype)
 
@@ -39,7 +41,7 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,coords,motion::RigidBodyMotions.
   dEy = InterpolationMatrix(gradopy,sys.Fq,sys.Vb)
 
   streaming_r₁(u,t) = TimeMarching.r₁(u,t,sys,motion)
-  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,motion,dEx,dEy)
+  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,motion,dEx,dEy,body.cent)
   streaming_plan_constraints(u,t::Float64) = TimeMarching.plan_constraints(u,t,sys)
 
   return IFHERK(u,f,sys.Δt,plans,streaming_plan_constraints,
@@ -52,7 +54,7 @@ function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyM
     return zero(u[1]), TimeMarching.r₁(u[1],t,sys), lmul!(-1,curl(sys.L\u[1])), [real(ċ),imag(ċ)]
 end
 
-function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy)
+function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy,centroid)
   fact = 2 # not sure how to explain this factor yet.
   _,ċ,_,_,α̇,_ = motion(t)
   U = (real(ċ),imag(ċ))
@@ -68,7 +70,7 @@ function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyM
   sys.Vb.u .*= -fact*Δx⁻¹*u[4][2]
   sys.Vb.v .*= -fact*Δx⁻¹*u[4][2]
   Vb .+= sys.Vb # -X⋅dv₁/dx - Y.⋅dv₁/dy
-  return U + α̇ × (sys.X̃ - body.cent), Vb, Vector{Float64}(), Vector{Float64}()
+  return U + α̇ × (sys.X̃ - centroid), Vb, Vector{Float64}(), Vector{Float64}()
 
 end
 
