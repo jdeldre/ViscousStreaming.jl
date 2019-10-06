@@ -11,7 +11,7 @@ using DiffRules
 import ForwardDiff:value,partials,derivative,extract_derivative
 
 
-export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean,
+export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean, AnalyticalStreaming,
         uvelocity,vvelocity
 
 """
@@ -496,3 +496,25 @@ function streamfunction(x,y,t,s::SecondOrder)
     sin2eval = 2*coseval*sineval
     return real(s.Ψ₂(r)*exp.(-2im*t))*sin2eval
 end
+
+### all together
+struct AnalyticalStreaming
+  p :: StreamingParams
+  s1 :: FirstOrder
+  s2s :: SecondOrderMean
+  s2 :: SecondOrder
+end
+
+AnalyticalStreaming(p) = AnalyticalStreaming(s1(p),s2s(p),s2(p))
+
+vorticity(x,y,t,s::AnalyticalStreaming) =
+      s.p.ϵ*vorticity(x,y,t,s.s1) + s.p.ϵ^2*(vorticity(x,y,s.s2s)+vorticity(x,y,t,s.s2))
+
+uvelocity(x,y,t,s::AnalyticalStreaming) =
+      s.p.ϵ*uvelocity(x,y,t,s.s1) + s.p.ϵ^2*(uvelocity(x,y,s.s2s)+uvelocity(x,y,t,s.s2))
+
+vvelocity(x,y,t,s::AnalyticalStreaming) =
+      s.p.ϵ*vvelocity(x,y,t,s.s1) + s.p.ϵ^2*(vvelocity(x,y,s.s2s)+vvelocity(x,y,t,s.s2))
+
+streamfunction(x,y,t,s::AnalyticalStreaming) =
+      s.p.ϵ*streamfunction(x,y,t,s.s1) + s.p.ϵ^2*(streamfunction(x,y,s.s2s)+streamfunction(x,y,t,s.s2))
