@@ -268,7 +268,7 @@ function FirstOrder(p::StreamingParams)
     # for verifying the solution
     LW₁ = D²(W₁,K);
     resid1 = ComplexFunc(r -> LW₁(r)+im*p.Re*W₁(r))
-    println("Maximum residual on solution = ",maximum(abs.(resid1.(range(1,5,length=10)))))
+    println("Maximum residual on W₁ = ",maximum(abs.(resid1.(range(1,5,length=10)))))
 
     # for verifying boundary conditions
     dΨ₁ = ComplexFunc(r -> derivative(Ψ₁,r))
@@ -344,7 +344,7 @@ function SecondOrderMean(p::StreamingParams;n1inf=100000,n120=400000)
   # for verifying the solution
   LWs₂ = D²(Ws₂,K)
   resids = ComplexFunc(r -> real(LWs₂(r)-f₀(r)))
-  println("Maximum residual on solution = ",maximum(abs.(resids.(range(1,5,length=10)))))
+  println("Maximum residual on Ws₂ = ",maximum(abs.(resids.(range(1,5,length=10)))))
 
   # for verifying boundary conditions
   dΨs₂ = ComplexFunc(r -> derivative(Ψs₂,r))
@@ -446,7 +446,7 @@ function SecondOrder(p::StreamingParams;n1inf=100000,n120=400000)
   # for verifying the solution
   LW₂ = D²(W₂,K);
   resid = ComplexFunc(r -> LW₂(r)+2im*p.Re*W₂(r)-g₀(r))
-  println("Maximum residual on solution = ",maximum(abs.(resid.(range(1,5,length=10)))))
+  println("Maximum residual on W₂ = ",maximum(abs.(resid.(range(1,5,length=10)))))
 
   # for verifying boundary conditions
   dΨ₂ = ComplexFunc(r -> derivative(Ψ₂,r))
@@ -506,6 +506,12 @@ struct AnalyticalStreaming
 end
 
 AnalyticalStreaming(p) = AnalyticalStreaming(s1(p),s2s(p),s2(p))
+
+function Base.show(io::IO, s::AnalyticalStreaming)
+        println(io, "Analytical streaming flow solution for")
+        println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
+end
+
 
 vorticity(x,y,t,s::AnalyticalStreaming) =
       s.p.ϵ*vorticity(x,y,t,s.s1) + s.p.ϵ^2*(vorticity(x,y,s.s2s)+vorticity(x,y,t,s.s2))
