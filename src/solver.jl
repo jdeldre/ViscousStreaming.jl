@@ -13,8 +13,11 @@ setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
         NavierStokes(Re,Δx,xlim,ylim,Δt,
                     X̃ = coords,
                     isstore = true,
-                    isasymptotic = true,
+                    isasymptotic = false,
                     isfilter = false, ddftype = ddftype)
+
+initialize_state(sys) = (Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),[0.0,0.0])
+initialize_force(sys) = (VectorData(sys.X̃),VectorData(sys.X̃),Vector{Float64}(),Vector{Float64}())
 
 function initialize_solver(Re,Δx,xlim,ylim,Δt,coords,motion::RigidBodyMotions.RigidBodyMotion;ddftype=Fields.Goza)
 
@@ -24,8 +27,8 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,coords,motion::RigidBodyMotions.
   ΔX = Edges(Primal,w₀)
   f1 = VectorData(coords)
 
-  u = (zero(w₀),zero(w₀),zero(ΔX),[0.0,0.0])
-  f = (zero(f1),zero(f1),Vector{Float64}(),Vector{Float64}())
+  u = initialize_state(sys)
+  f = initialize_force(sys)
 
   plans = ((t,u) -> Fields.plan_intfact(t,u,sys),(t,u) -> Fields.plan_intfact(t,u,sys),
            (t,u) -> Identity(),(t,u)-> I)
@@ -44,12 +47,12 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,coords,motion::RigidBodyMotions.
 
 end
 
-function streaming_r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion)
+function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion)
     _,ċ,_,_,α̇,_ = motion(t)
     return zero(u[1]), TimeMarching.r₁(u[1],t,sys), lmul!(-1,curl(sys.L\u[1])), [real(ċ),imag(ċ)]
 end
 
-function streaming_r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy)
+function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy)
   fact = 2 # not sure how to explain this factor yet.
   _,ċ,_,_,α̇,_ = motion(t)
   U = (real(ċ),imag(ċ))
