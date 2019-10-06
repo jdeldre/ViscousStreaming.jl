@@ -12,7 +12,7 @@ import ForwardDiff:value,partials,derivative,extract_derivative
 
 
 export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean, AnalyticalStreaming,
-        uvelocity,vvelocity
+        uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
 
 """
     StreamingParams(ϵ,Re)
@@ -229,25 +229,27 @@ end
 
 
 
-abstract type Order end
-abstract type First <: Order end
-abstract type Second <: Order end
+#abstract type Order end
+#abstract type First <: Order end
+#abstract type Second <: Order end
 
-struct ComplexAmplitude{FT,K}
-    f :: FT
-end
-
-ComplexAmplitude(f,K) = ComplexAmplitude{typeof(f),K == 1 ? First : Second}(f)
-
-function (A::ComplexAmplitude{FT,Second})(x,y) where {FT}
-    r2 = x^2+y^2
-    r = sqrt(r2)
-    return 2*real(A.f(r))*x*y/r2
-end
+# struct ComplexAmplitude{FT,K}
+#     f :: FT
+# end
+#
+# ComplexAmplitude(f,K) = ComplexAmplitude{typeof(f),K == 1 ? First : Second}(f)
+#
+# function (A::ComplexAmplitude{FT,Second})(x,y) where {FT}
+#     r2 = x^2+y^2
+#     r = sqrt(r2)
+#     return 2*real(A.f(r))*x*y/r2
+# end
 
 #### Construct the first and second order solutions
 
-struct FirstOrder
+abstract type Analytical end
+
+struct FirstOrder <: Analytical
     K  :: Integer
     p  :: StreamingParams
     Ψ₁ :: ComplexFunc
@@ -310,7 +312,7 @@ end
 
 # second order mean
 
-struct SecondOrderMean
+struct SecondOrderMean <: Analytical
     K  :: Integer
     p  :: StreamingParams
     Ψ₂ :: ComplexFunc
@@ -399,7 +401,7 @@ end
 
 
 # second order unsteady
-struct SecondOrder
+struct SecondOrder <: Analytical
     K  :: Integer
     p  :: StreamingParams
     Ψ₂ :: ComplexFunc
@@ -511,6 +513,13 @@ function Base.show(io::IO, s::AnalyticalStreaming)
         println(io, "Analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
+
+# convenience functions
+params(s::T) where {T <: Analytical} = s.p
+
+firstorder(s::AnalyticalStreaming) = s.s1
+secondordermean(s::AnalyticalStreaming) = s.s2s
+secondorder(s::AnalyticalStreaming) = s.s2
 
 
 vorticity(x,y,t,s::AnalyticalStreaming) =
