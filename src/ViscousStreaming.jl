@@ -1,4 +1,4 @@
-module Streaming
+module ViscousStreaming
 
   using Reexport
 
