@@ -6,6 +6,12 @@
 #
 using LinearAlgebra
 
+#=
+Make the tuple data structures. The state tuple holds the first and second asymptotic
+level vorticity, the Eulerian displacement field for the first level, and the component
+of the unscaled centroid displacement of the body. The last two parts have no constraints,
+so we set the force to empty vectors.
+=#
 const TU = Tuple{Nodes{Dual},Nodes{Dual},Edges{Primal},Vector{Float64}}
 const TF = Tuple{VectorData,VectorData,Vector{Float64},Vector{Float64}}
 
@@ -24,14 +30,15 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,body::Body,motion::RigidBodyMoti
   coords = VectorData(body.x,body.y)
 
   sys = setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=ddftype)
-
-  w₀ = Nodes(Dual,size(sys))
-  ΔX = Edges(Primal,w₀)
-  f1 = VectorData(coords)
-
+  
   u = initialize_state(sys)
   f = initialize_force(sys)
 
+  #=
+  The integrating factor for the first two equations is simply the one associated
+  with the usual viscous term. The last two equations have no term that needs an
+  integrating factor, so we set their integrating factor operators to the identity, I.
+  =#
   plans = ((t,u) -> Fields.plan_intfact(t,u,sys),(t,u) -> Fields.plan_intfact(t,u,sys),
            (t,u) -> Identity(),(t,u)-> I)
 
@@ -49,11 +56,24 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,body::Body,motion::RigidBodyMoti
 
 end
 
+#=
+The right-hand side of the first-order equation is 0. The right-hand side of the
+second-order equation is the negative of the non-linear convective term, based on
+the first-order solution; for this, we use the predefined `r₁`. The right-hand side
+of the Eulerian displacement field equation is just the corresponding velocity at that
+level. The right-hand side of the body update equation is the unscaled velocity.
+=#
 function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion)
     _,ċ,_,_,α̇,_ = motion(t)
     return zero(u[1]), TimeMarching.r₁(u[1],t,sys), lmul!(-1,curl(sys.L\u[1])), [real(ċ),imag(ċ)]
 end
 
+#=
+The right-hand side of the first constraint equation is the unscaled rigid-body velocity,
+evaluated at the surface points. The right-hand side of the second constraint equation
+is $-\hat{X}\cdot\nabla v_1$. The Eulerian displacement and the body update equations
+have no constraint, so these are set to an empty vector.
+=#
 function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy,centroid)
   fact = 2 # not sure how to explain this factor yet.
   _,ċ,_,_,α̇,_ = motion(t)
@@ -74,8 +94,14 @@ function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyM
 
 end
 
+#=
+The constraint operators for the first two equations are the usual ones for a
+stationary body and are precomputed. There are no constraints or constraint forces
+for the last three equations.
+=#
 function TimeMarching.plan_constraints(u::TU,t::Float64,sys::NavierStokes)
-    B₁ᵀ, B₂ = TimeMarching.plan_constraints(u[1],t,sys) # These are used by both the first and second equations
+    # These are used by both the first and second equations
+    B₁ᵀ, B₂ = TimeMarching.plan_constraints(u[1],t,sys)
     return (B₁ᵀ,B₁ᵀ,f->zero(u[3]),f->zero(u[4])),
             (B₂,B₂,u->Vector{Float64}(),u->Vector{Float64}())
 end
