@@ -15,6 +15,9 @@ so we set the force to empty vectors.
 const TU = Tuple{Nodes{Dual},Nodes{Dual},Edges{Primal},Vector{Float64}}
 const TF = Tuple{VectorData,VectorData,Vector{Float64},Vector{Float64}}
 
+const TUMultiBody = Tuple{Nodes{Dual},Nodes{Dual},Edges{Primal},NTuple{NB,Vector{Float64}} where NB}
+
+
 setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
         NavierStokes(Re,Δx,xlim,ylim,Δt,
                     X̃ = coords,
@@ -22,15 +25,27 @@ setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
                     isasymptotic = false,
                     isfilter = false, ddftype = ddftype)
 
-initialize_state(sys) = (Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),[0.0,0.0])
+initialize_state(sys) = Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),[0.0,0.0]
+
+function initialize_state(sys,nbody)
+  rigid = ()
+  for i = 1:nbody
+    rigid = (rigid...,[0.0,0.0,0.0])
+  end
+  return Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),rigid
+end
+
 initialize_force(sys) = (VectorData(sys.X̃),VectorData(sys.X̃),Vector{Float64}(),Vector{Float64}())
 
 function initialize_solver(Re,Δx,xlim,ylim,Δt,body::Body,motion::RigidBodyMotions.RigidBodyMotion;ddftype=Fields.Goza)
 
+  # NEED A MULTIBODY VERSION OF THIS (OR ASSUME MULTIBODY)
+
+  #coords = VectorData(collect(bl))
   coords = VectorData(body.x,body.y)
 
   sys = setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=ddftype)
-  
+
   u = initialize_state(sys)
   f = initialize_force(sys)
 
@@ -47,8 +62,43 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,body::Body,motion::RigidBodyMoti
   dEx = InterpolationMatrix(gradopx,sys.Fq,sys.Vb)
   dEy = InterpolationMatrix(gradopy,sys.Fq,sys.Vb)
 
+  # adapt these to multibody!
   streaming_r₁(u,t) = TimeMarching.r₁(u,t,sys,motion)
-  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,motion,dEx,dEy,body.cent)
+  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,motion,body.cent,dEx,dEy)
+  streaming_plan_constraints(u,t::Float64) = TimeMarching.plan_constraints(u,t,sys)
+
+  return IFHERK(u,f,sys.Δt,plans,streaming_plan_constraints,
+                      (streaming_r₁,streaming_r₂),rk=TimeMarching.RK31,isstored=true), sys
+
+end
+
+#=
+multibody version
+=#
+function initialize_solver(Re,Δx,xlim,ylim,Δt,bl::BodyList,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform};ddftype=Fields.Goza)
+
+  coords = VectorData(collect(bl))
+
+  sys = setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=ddftype)
+
+  u = initialize_state(sys,length(bl))
+  f = initialize_force(sys)
+
+  #=
+  The integrating factor for the first two equations is simply the one associated
+  with the usual viscous term. The last two equations have no term that needs an
+  integrating factor, so we set their integrating factor operators to the identity, I.
+  =#
+  plans = ((t,u) -> Fields.plan_intfact(t,u,sys),(t,u) -> Fields.plan_intfact(t,u,sys),
+           (t,u) -> Identity(),(t,u)-> I)
+
+  gradopx = Regularize(sys.X̃,cellsize(sys);I0=origin(sys),issymmetric=true,ddftype=ddftype,graddir=1)
+  gradopy = Regularize(sys.X̃,cellsize(sys);I0=origin(sys),issymmetric=true,ddftype=ddftype,graddir=2)
+  dEx = InterpolationMatrix(gradopx,sys.Fq,sys.Vb)
+  dEy = InterpolationMatrix(gradopy,sys.Fq,sys.Vb)
+
+  streaming_r₁(u,t) = TimeMarching.r₁(u,t,sys,ml)
+  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,ml,tl,dEx,dEy)
   streaming_plan_constraints(u,t::Float64) = TimeMarching.plan_constraints(u,t,sys)
 
   return IFHERK(u,f,sys.Δt,plans,streaming_plan_constraints,
@@ -63,9 +113,16 @@ the first-order solution; for this, we use the predefined `r₁`. The right-hand
 of the Eulerian displacement field equation is just the corresponding velocity at that
 level. The right-hand side of the body update equation is the unscaled velocity.
 =#
-function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion)
+function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotion)
     _,ċ,_,_,α̇,_ = motion(t)
     return zero(u[1]), TimeMarching.r₁(u[1],t,sys), lmul!(-1,curl(sys.L\u[1])), [real(ċ),imag(ċ)]
+end
+
+#=
+For multiple bodies
+=#
+function TimeMarching.r₁(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion})
+    return zero(u[1]), TimeMarching.r₁(u[1],t,sys), -curl(sys.L\u[1])), TimeMarching.r₁(u[4],t,ml)
 end
 
 #=
@@ -74,7 +131,7 @@ evaluated at the surface points. The right-hand side of the second constraint eq
 is $-\hat{X}\cdot\nabla v_1$. The Eulerian displacement and the body update equations
 have no constraint, so these are set to an empty vector.
 =#
-function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,dEx,dEy,centroid)
+function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyMotions.RigidBodyMotion,centroid,dEx,dEy)
   fact = 2 # not sure how to explain this factor yet.
   _,ċ,_,_,α̇,_ = motion(t)
   U = (real(ċ),imag(ċ))
@@ -95,6 +152,51 @@ function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,motion::RigidBodyM
 end
 
 #=
+This is for multibody
+=#
+function TimeMarching.r₂(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform},dEx,dEy)
+  fact = 2 # not sure how to explain this factor yet.
+
+  Xc = zero(sys.Vb) # instantaneous centroid
+  Xc0 = zero(sys.Vb) # mean centroid
+  U = zero(sys.Vb)  # translational velocity
+  α̇ = zero(sys.Vb.u) # angular velocity
+  for ib = 1:NB
+      _,ċ,_,_,α̇i,_ = ml[ib](t)
+
+      ri = getrange(bl,ib)
+
+      # fill VectorData with translational velocity
+      U.u[ri] .= real(ċ)
+      U.v[ri] .= imag(ċ)
+      α̇[ri] .= α̇i
+
+      Xci = vec(tl[ib])
+      Xc0.u[ri] .= Xci[1]
+      Xc0.v[ri] .= Xci[2]
+
+      # fill VectorData with corresponding instantaneous centroids
+      Xc.u[ri] .= u[4][ib][1]
+      Xc.v[ri] .= u[4][ib][2]
+    end
+
+  # -ΔX̂⋅∇v₁
+  Δx⁻¹ = 1/cellsize(sys)
+
+  sys.Fq .= curl(sys.L\u[1]) # -v₁
+  sys.Vb .= dEx*sys.Fq # dv₁/dx*Δx
+  sys.Vb.u .*= -fact*Δx⁻¹*Xc.u
+  sys.Vb.v .*= -fact*Δx⁻¹*Xc.u
+  Vb = deepcopy(sys.Vb) # -X⋅dv₁/dx
+  sys.Vb .= dEy*sys.Fq # dv₁/dy*Δx
+  sys.Vb.u .*= -fact*Δx⁻¹*Xc.v
+  sys.Vb.v .*= -fact*Δx⁻¹*Xc.v
+  Vb .+= sys.Vb # -X⋅dv₁/dx - Y.⋅dv₁/dy
+  return U + α̇ × (sys.X̃ - Xc0), Vb, Vector{Float64}(), Vector{Float64}()
+
+end
+
+#=
 The constraint operators for the first two equations are the usual ones for a
 stationary body and are precomputed. There are no constraints or constraint forces
 for the last three equations.
@@ -102,6 +204,6 @@ for the last three equations.
 function TimeMarching.plan_constraints(u::TU,t::Float64,sys::NavierStokes)
     # These are used by both the first and second equations
     B₁ᵀ, B₂ = TimeMarching.plan_constraints(u[1],t,sys)
-    return (B₁ᵀ,B₁ᵀ,f->zero(u[3]),f->zero(u[4])),
+    return (B₁ᵀ,B₁ᵀ,f->zero(u[3]),f->zero.(u[4])),
             (B₂,B₂,u->Vector{Float64}(),u->Vector{Float64}())
 end
