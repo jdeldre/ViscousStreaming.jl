@@ -92,7 +92,7 @@ function initialize_solver(Re,Δx,xlim,ylim,Δt,bl::BodyList,ml::Vector{RigidBod
   dEy = InterpolationMatrix(gradopy,sys.Fq,sys.Vb)
 
   streaming_r₁(u,t) = TimeMarching.r₁(u,t,sys,ml)
-  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,ml,tl,dEx,dEy)
+  streaming_r₂(u,t) = TimeMarching.r₂(u,t,sys,bl,ml,tl,dEx,dEy)
   streaming_plan_constraints(u,t::Float64) = TimeMarching.plan_constraints(u,t,sys)
 
   return IFHERK(u,f,sys.Δt,plans,streaming_plan_constraints,
@@ -148,7 +148,7 @@ end
 #=
 This is for multibody
 =#
-function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform},dEx,dEy)
+function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,bl::BodyList,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform},dEx,dEy)
   fact = 2 # not sure how to explain this factor yet.
 
   Xc = zero(sys.Vb) # instantaneous centroid
