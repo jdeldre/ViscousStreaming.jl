@@ -15,9 +15,6 @@ so we set the force to empty vectors.
 const TU = Tuple{Nodes{Dual},Nodes{Dual},Edges{Primal},Vector{Float64}}
 const TF = Tuple{VectorData,VectorData,Vector{Float64},Vector{Float64}}
 
-const TUMultiBody = Tuple{Nodes{Dual},Nodes{Dual},Edges{Primal},NTuple{NB,Vector{Float64}} where NB}
-
-
 setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
         NavierStokes(Re,Δx,xlim,ylim,Δt,
                     X̃ = coords,
@@ -28,10 +25,7 @@ setup_system(Re,Δx,xlim,ylim,Δt,coords;ddftype=Fields.Goza) =
 initialize_state(sys) = Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),[0.0,0.0]
 
 function initialize_state(sys,nbody)
-  rigid = ()
-  for i = 1:nbody
-    rigid = (rigid...,[0.0,0.0,0.0])
-  end
+  rigid = zeros(3*nbody)
   return Nodes(Dual,size(sys)),Nodes(Dual,size(sys)),Edges(Primal,size(sys)),rigid
 end
 
@@ -121,7 +115,7 @@ end
 #=
 For multiple bodies
 =#
-function TimeMarching.r₁(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion})
+function TimeMarching.r₁(u::TU,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion})
     return zero(u[1]), TimeMarching.r₁(u[1],t,sys), -curl(sys.L\u[1]), TimeMarching.r₁(u[4],t,ml)
 end
 
@@ -154,14 +148,14 @@ end
 #=
 This is for multibody
 =#
-function TimeMarching.r₂(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform},dEx,dEy)
+function TimeMarching.r₂(u::TU,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion},tl::Vector{RigidTransform},dEx,dEy)
   fact = 2 # not sure how to explain this factor yet.
 
   Xc = zero(sys.Vb) # instantaneous centroid
   Xc0 = zero(sys.Vb) # mean centroid
   U = zero(sys.Vb)  # translational velocity
   α̇ = zero(sys.Vb.u) # angular velocity
-  for ib = 1:NB
+  for ib = 1:length(ml)
       _,ċ,_,_,α̇i,_ = ml[ib](t)
 
       ri = getrange(bl,ib)
@@ -176,8 +170,8 @@ function TimeMarching.r₂(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vecto
       Xc0.v[ri] .= Xci[2]
 
       # fill VectorData with corresponding instantaneous centroids
-      Xc.u[ri] .= u[4][ib][1]
-      Xc.v[ri] .= u[4][ib][2]
+      Xc.u[ri] .= u[4][3*(ib-1)+1]
+      Xc.v[ri] .= u[4][3*(ib-1)+2]
     end
 
   # -ΔX̂⋅∇v₁
@@ -204,6 +198,6 @@ for the last three equations.
 function TimeMarching.plan_constraints(u::TU,t::Float64,sys::NavierStokes)
     # These are used by both the first and second equations
     B₁ᵀ, B₂ = TimeMarching.plan_constraints(u[1],t,sys)
-    return (B₁ᵀ,B₁ᵀ,f->zero(u[3]),f->zero.(u[4])),
+    return (B₁ᵀ,B₁ᵀ,f->zero(u[3]),f->zero(u[4])),
             (B₂,B₂,u->Vector{Float64}(),u->Vector{Float64}())
 end
