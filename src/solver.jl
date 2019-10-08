@@ -122,7 +122,7 @@ end
 For multiple bodies
 =#
 function TimeMarching.r₁(u::TUMultiBody,t::Float64,sys::NavierStokes,ml::Vector{RigidBodyMotion})
-    return zero(u[1]), TimeMarching.r₁(u[1],t,sys), -curl(sys.L\u[1])), TimeMarching.r₁(u[4],t,ml)
+    return zero(u[1]), TimeMarching.r₁(u[1],t,sys), -curl(sys.L\u[1]), TimeMarching.r₁(u[4],t,ml)
 end
 
 #=
