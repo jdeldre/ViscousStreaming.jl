@@ -1,5 +1,10 @@
 [deps]
+DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"
+NamedColors = "51fcb6bd-ecd8-522c-95bc-4099d1d03463"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 ViscousFlow = "103da179-b3e4-57c1-99a4-586354eb2c5a"
 ViscousStreaming = "47fb7046-13b0-40db-b6a6-74fa44cf0959"
