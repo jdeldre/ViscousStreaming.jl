@@ -1,8 +1,4 @@
-# Routines for setting up the solver for streaming problems
-#
-# should take care of the steps between setting up Navier-Stokes system
-# and the integrator. Should accept the domain dimensions, grid spacing, time
-# step size, Reynolds number,
+# Routines for setting up the flow solver for streaming problems
 #
 using LinearAlgebra
 
