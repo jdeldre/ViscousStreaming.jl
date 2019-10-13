@@ -9,6 +9,7 @@ module ViscousStreaming
   include("inertialparticles.jl")
   include("displacement.jl")
   include("averaging.jl")
+  include("trajectories.jl")
 
 
 
