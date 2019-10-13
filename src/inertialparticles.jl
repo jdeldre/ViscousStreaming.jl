@@ -110,7 +110,7 @@ function inertial_velocity(ux::History{S,H},uy::History{T,H},
         end
         a1 = acceleration_force(Edges(u1x[i],u1y[i]),Edges(du1xdt[i],du1ydt[i]),g,p)
 
-        u .= inertial_nosaffman(Edges(ux[i],uy[i]),Edges(vx[i],vy[i]),g,p)
+        u .= inertial_velocity(Edges(ux[i],uy[i]),Edges(vx[i],vy[i]),g,p)
         u .-= sqrt(p.ϵ*p.β*p.τ^3)*saffman(a1,vorticity(wi,g))
         vx[i] .= u.u
         vy[i] .= u.v
