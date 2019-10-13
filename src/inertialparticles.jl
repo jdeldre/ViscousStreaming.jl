@@ -133,14 +133,14 @@ the physical parameters are also supplied in `p`. The result is returned as
 primal edge data of the same size as `u`.
 """
 function inertial_velocity(u::Edges,dudt::Edges,ω::Nodes,g::PhysicalGrid,p::InertialParameters)
-    a = acceleration_force(u,dudt,g,p.β,p.Re)
+    a = acceleration_force(u,dudt,g,p)
     return u + p.τ*a - sqrt(p.ϵ*p.β*p.τ^3)*saffman(a,ω)
 end
 
 """
     inertial_velocity(u::Edges{Primal},dudt::Edges{Primal},g::PhysicalGrid,p::InertialParameters)
 
-Return the inertial particle velocity field
+Return the inertial particle velocity field without Saffman lift term,
 ```math
 \\mathbf{v} = \\mathbf{u} + \\tau \\mathbf{a}
 ```
@@ -149,7 +149,7 @@ the physical parameters are also supplied in `p`. The result is returned as
 primal edge data of the same size as `u`.
 """
 function inertial_velocity(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
-    a = acceleration_force(u,dudt,g,p.β,p.Re)
+    a = acceleration_force(u,dudt,g,p)
     return u + p.τ*a
 end
 
