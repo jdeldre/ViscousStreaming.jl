@@ -88,7 +88,7 @@ function inertial_velocity(ux::History{S,H},uy::History{T,H},
         duxdt::History{S,H},duydt::History{T,H},
         du1xdt::History{S,H},du1ydt::History{T,H},
         w::History{R,H},
-        g::PhysicalGrid,Δt::Real,p::InertialParameters;cflag::Bool=false) where {S<:XEdges,T<:YEdges,R<:Nodes}
+        g::PhysicalGrid,Δt::Real,p::InertialParameters;cflag::Bool=false) where {S<:XEdges,T<:YEdges,R<:Nodes,H<:Systems.HistoryType}
 
     # vx, vy serve as temp storage for du/dt
     vx = deepcopy(duxdt)
