@@ -4,7 +4,7 @@ using Interpolations
 
 export interpolated_history, compute_displacement_field, stokes_drift
 
-function stokes_drift(vx::History{S,H},vy::History{T,H},trange) where {S,T,H<:PeriodicHistory}
+function stokes_drift(vx::History{S,H},vy::History{T,H},trange,Δt::Float64,g::PhysicalGrid) where {S,T,H<:PeriodicHistory}
 
     ξi = Edges(Primal,vx[1])
 
@@ -15,7 +15,6 @@ function stokes_drift(vx::History{S,H},vy::History{T,H},trange) where {S,T,H<:Pe
 
     vd = History(ξi,htype=PeriodicHistory)
     for (i,ξ) in enumerate(ξ_hist)
-      ti = thist[i]
       directional_derivative!(v1tmp,typeof(ξi)(vx[i],vy[i]),ξ)
       directional_derivative!(v2tmp,ξ,typeof(ξi)(vx[i],vy[i]))
       v1tmp -= v2tmp
@@ -55,20 +54,21 @@ function compute_displacement_field(vx::History{S,H},vy::History{T,H},ξi::Edges
   vxt = interpolated_history(vx,trange)
   vyt = interpolated_history(vy,trange)
 
-  TimeMarching.r₁(ξ::T,t::Float64) where {T <: VectorGridData} = T(vxt(t),vyt(t))
+  displacement_r₁(ξ::T,t::Float64) where {T <: VectorGridData} = T(vxt(t),vyt(t))
 
-  solver = RK(ξi, Δt, TimeMarching.r₁, rk=TimeMarching.RK31)
+  solver = RK(ξi, Δt, displacement_r₁, rk=TimeMarching.RK31)
 
   t = 0.0
   t_hist = History(0.0,htype=PeriodicHistory)
-  ξ_hist = History(ξ,htype=PeriodicHistory)
+  ξ_hist = History(ξi,htype=PeriodicHistory)
   u = deepcopy(ξi)
   for ti in trange
     push!(ξ_hist,deepcopy(u))
     push!(t_hist,copy(t))
-    global t,u = solver(t,u)
+    t,u = solver(t,u)
   end
 
+  # remove the mean
   ξavg = mean(ξ_hist)
   ξ_hist .= map(ξ -> ξ - ξavg,ξ_hist)
 
