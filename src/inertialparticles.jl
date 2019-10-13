@@ -69,6 +69,57 @@ function inertial_velocity(ux::History{S,H},uy::History{T,H},
 end
 
 """
+    inertial_velocity(ux::History{XEdges},uy::History{YEdges},
+                            u1x::History{XEdges},u1y::History{YEdges},
+                            duxdt::History{XEdges},duydt::History{YEdges},
+                            du1xdt::History{XEdges},du1ydt::History{YEdges},w::History{Nodes},g,Δt,p)
+
+Calculate the first two terms of the asymptotically-expanded time history of the inertial
+particle velocity field for a given fluid velocity
+field, whose x and y component histories are given in `ux` and `uy`, whose first-order
+velocities are `u1x` and `u1y`, and whose Eulerian time derivatives of these are
+`duxdt`, `duydt`, `du1xdt`, `du1ydt`, and whose
+vorticity (unscaled by grid spacing) is given in `w`. The physical grid data is given in `g`,
+the time step size corresponding to the histories is in `Δt`, and the physical parameters in
+`p`. The result is returned as a tuple of `History{XEdge}` and `History{YEdge}`.
+"""
+function inertial_velocity(ux::History{S,H},uy::History{T,H},
+        u1x::History{S,H},u1y::History{T,H},
+        duxdt::History{S,H},duydt::History{T,H},
+        du1xdt::History{S,H},du1ydt::History{T,H},
+        w::History{R,H},
+        g::PhysicalGrid,Δt::Real,p::InertialParameters;cflag::Bool=false) where {S<:XEdges,T<:YEdges,R<:Nodes}
+
+    # vx, vy serve as temp storage for du/dt
+    vx = deepcopy(duxdt)
+    vy = deepcopy(duydt)
+
+    u = Edges(Primal,w[1])
+    u2 = Edges(Primal,w[1])
+
+    for (i,wi) in enumerate(w)
+
+        # add u1.grad(u1) to du/dt
+        if cflag
+            u .= typeof(u)(u1x[i],u1y[i])
+            directional_derivative!(u2,u,u)
+
+            u2 ./= cellsize(g)
+            vx[i] .+= u2.u
+            vy[i] .+= u2.v
+        end
+        a1 = acceleration_force(Edges(u1x[i],u1y[i]),Edges(du1xdt[i],du1ydt[i]),g,p)
+
+        u .= inertial_nosaffman(Edges(ux[i],uy[i]),Edges(vx[i],vy[i]),g,p)
+        u .-= sqrt(p.ϵ*p.β*p.τ^3)*saffman(a1,vorticity(wi,g))
+        vx[i] .= u.u
+        vy[i] .= u.v
+    end
+    return vx, vy
+end
+
+
+"""
     inertial_velocity(u::Edges{Primal},dudt::Edges{Primal},ω::Nodes{Dual},g::PhysicalGrid,p::InertialParameters)
 
 Return the inertial particle velocity field
