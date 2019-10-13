@@ -152,6 +152,6 @@ end
 Time derivatives
 =#
 
-ddt(u::History{T,PeriodicHistory}) = 0.5*(diff(u) + diff(circshift(u,1)))
+ddt(u::History{T,PeriodicHistory}) where {T} = 0.5*(diff(u) + diff(circshift(u,1)))
 
 ddt(u,Δt::Real) = ddt(u)/Δt
