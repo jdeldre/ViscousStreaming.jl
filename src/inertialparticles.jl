@@ -133,7 +133,7 @@ the physical parameters are also supplied in `p`. The result is returned as
 primal edge data of the same size as `u`.
 """
 function inertial_velocity(u::Edges,dudt::Edges,ω::Nodes,g::PhysicalGrid,p::InertialParameters)
-    a = accelforce(u,dudt,g,p.β,p.Re)
+    a = acceleration_force(u,dudt,g,p.β,p.Re)
     return u + p.τ*a - sqrt(p.ϵ*p.β*p.τ^3)*saffman(a,ω)
 end
 
@@ -149,7 +149,7 @@ the physical parameters are also supplied in `p`. The result is returned as
 primal edge data of the same size as `u`.
 """
 function inertial_velocity(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
-    a = accelforce(u,dudt,g,p.β,p.Re)
+    a = acceleration_force(u,dudt,g,p.β,p.Re)
     return u + p.τ*a
 end
 
