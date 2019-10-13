@@ -1,6 +1,9 @@
 ## Here, define routines that
 #  -
 
+using Statistics
+import Statistics: mean
+
 export reynolds_decomposition!
 
 """
