@@ -83,6 +83,8 @@ module ViscousStreaming
       U :: Edges{Primal,NX,NY,ComplexF64}
   end
 
+  Base.size(::AsymptoticComputational{O,F,NX,NY}) where {O,F,NX,NY} = NX, NY
+
   abstract type StreamingSolution end
 
   struct StreamingAnalytical <: StreamingSolution
@@ -98,7 +100,7 @@ module ViscousStreaming
     s1 :: AsymptoticComputational{FirstOrder,F}
     s̄2 :: AsymptoticComputational{SecondOrderMean,F}
     sd :: AsymptoticComputational{SecondOrderMean,F}
-    s2 :: AsymptoticComputational{SecondOrder,F}
+    s2 :: Union{AsymptoticComputational{SecondOrder,F},Nothing}
 
   end
 

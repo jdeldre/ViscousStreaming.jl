@@ -153,7 +153,50 @@ function inertial_velocity(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParam
     return u + p.τ*a
 end
 
+"""
+"""
+function inertial_velocity(s::StreamingComputational{FluidFlow},p::InertialParameters)
 
+  NX, NY = size(s.s1)
+
+  # Compute first-order velocity
+  u1 = s.s1.U
+  du1dt = ddt(s.s1).U
+  a1 = acceleration_force(u1,du1dt,s.g,p)
+
+  v1 = u1 + p.τ*a1
+
+  soln1 = AsymptoticComputational{FirstOrder,ParticleFlow,NX,NY}(s.p.Re,s.p.ϵ,s.p.Ω,s.g,
+                                            nothing,nothing,v1)
+
+  # second-order mean velocity, with mean Saffman term
+  Ls0, Ls2 = saffman(a1,s.s1.W)
+
+  # Add u1.grad u1 to dudt
+  u1gradu1 = deepcopy(s.s1.U)
+  directional_derivative!(u1gradu1,conj(u1),u1)
+  dū2dt = 0.5/cellsize(s.g)*u1gradu1
+
+  ū2 = s.s̄2.U
+  ā2 = acceleration_force(ū2,dū2dt,s.g,p)
+  v̄2 = ū2 + p.τ*ā2 - sqrt(p.β*p.τ^3/p.ϵ)*Ls0
+
+  meansoln2 = AsymptoticComputational{SecondOrderMean,ParticleFlow,NX,NY}(s.p.Re,s.p.ϵ,s.p.Ω,s.g,
+                                            nothing,nothing,v̄2)
+
+  # mean drift velocity v1.grad v1*
+  directional_derivative!(u1gradu1,conj(v1),v1)
+  v̄d = (-0.5im/s.p.Ω/cellsize(s.g))*u1gradu1
+  sdsoln = AsymptoticComputational{SecondOrderMean,ParticleFlow,NX,NY}(s.p.Re,s.p.ϵ,s.p.Ω,s.g,
+                                            nothing,nothing,v̄d)
+
+
+  return StreamingComputational{ParticleFlow}(s.p,s.g,soln1,meansoln2,sdsoln,nothing)
+
+
+
+
+end
 
 """
     acceleration_force(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
@@ -199,6 +242,71 @@ function saffman(u::Edges{Primal},ω::Nodes{Dual})
     return Ls
 end
 
+
+
+"""
+    saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{DualNX,NY,ComplexF64})
+
+Computes the Saffman lift operator ``\\mathcal{L}_s``, using velocity field `u` (in primal edge data)
+and vorticity field `ω` (in dual node data), given as complex amplitudes for oscillatory
+solution. Note that `ω` should be the proper vorticity (i.e., scaled by the grid spacing).
+The result (the 0th and 2nd-order Fourier coefficients) are returned as primal edge data
+"""
+function saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{Dual,NX,NY,ComplexF64}) where {NX,NY}
+
+  J∞ = 2.255
+  Ω = 1.0
+
+  Ĉ0 = _coefficient(0)
+  Ĉ2 = _coefficient(2)
+
+  expiϕ = similar(ω)
+  expiϕ .= ω./abs(ω)
+
+  b0_node = similar(ω)
+  b2_node = similar(ω)
+
+  b0_node .= Ĉ0
+  b2_node .= Ĉ2*(expiϕ∘expiϕ)
+
+  b0_node ./= sqrt.(abs(ω))
+  b2_node ./= sqrt.(abs(ω))
+
+  b0 = similar(u)
+  b2 = similar(u)
+
+  ViscousFlow.interpolate!(b0.u,b0_node)  # primal x edges
+  ViscousFlow.interpolate!(b0.v,b0_node)
+  ViscousFlow.interpolate!(b2.u,b2_node)  # primal y edges
+  ViscousFlow.interpolate!(b2.v,b2_node)
+
+  a0 = similar(u)
+  a2 = similar(u)
+
+  uxnode = Nodes(Dual,ω,dtype=ComplexF64)
+  uynode = Nodes(Dual,ω,dtype=ComplexF64)
+  ViscousFlow.interpolate!(uynode, u.v)
+  ViscousFlow.interpolate!(uxnode,-u.u)
+
+  ViscousFlow.interpolate!(a0.u, uynode ∘ conj(ω))
+  ViscousFlow.interpolate!(a0.v, uxnode ∘ conj(ω))
+  ViscousFlow.interpolate!(a2.u, uynode ∘ ω)
+  ViscousFlow.interpolate!(a2.v, uxnode ∘ ω)
+
+  Ls0 = 0.5*(a0 ∘ b0 + conj(a0) ∘ b0 + conj(a2) ∘ b2)
+  Ls2 = 0.5*(a0 ∘ b2 + conj(a0) ∘ b2 + b0 ∘ a2 + conj(b0) ∘ a2)
+
+  K = 3sqrt(3)/(2π^2)*J∞/Ω
+
+  Ls0 .*= K
+  Ls2 .*= K
+
+  return Ls0, Ls2
+
+end
+
+_coefficient(n) = 2^(1/2)*(ellipk(1/2)/π)*gamma(n/2+1/4)^2/gamma(1/4)^2/gamma(n+1/2)*sqrt(π)*2^n*(-1)^(n/2)
+
 #=
 Time derivatives
 =#
@@ -206,3 +314,17 @@ Time derivatives
 ddt(u::History{T,PeriodicHistory}) where {T} = 0.5*(diff(u) + diff(circshift(u,1)))
 
 ddt(u,Δt::Real) = ddt(u)/Δt
+
+function ddt(s::AsymptoticComputational{FirstOrder,F,NX,NY}) where {F,NX,NY}
+    return AsymptoticComputational{FirstOrder,F,NX,NY}(s.Re,s.ϵ,s.Ω,s.g,
+                      im*s.Ω*s.W,im*s.Ω*s.Ψ,im*s.Ω*s.U)
+end
+
+function ddt(s::AsymptoticComputational{SecondOrder,F,NX,NY}) where {F,NX,NY}
+    return AsymptoticComputational{SecondOrder,F,NX,NY}(s.Re,s.ϵ,s.Ω,s.g,
+                      2im*s.Ω*s.W,2im*s.Ω*s.Ψ,2im*s.Ω*s.U)
+end
+
+#=
+Frequency domain routines
+=#

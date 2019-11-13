@@ -3,6 +3,8 @@ Routines for the frequency domain solution
 =#
 
 import Base: size
+import ViscousFlow:curl,vorticity,streamfunction, velocity
+
 
 export FrequencyStreaming
 
@@ -153,7 +155,7 @@ end
 
 function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) where {NX,NY,N,T<:Number}
 
-    p = StreamingParams(sys.Re,sys.ϵ)
+    p = StreamingParams(sys.ϵ,sys.Re)
     Ω = 1.0
 
     w1 = Nodes(Dual,size(sys),dtype=ComplexF64)
@@ -274,3 +276,5 @@ for f in (:vorticity,:streamfunction,:velocity)
   @eval export $fmean
   @eval $fmean(s::StreamingComputational{FluidFlow}) = s.p.ϵ^2*($f(s.s̄2)+$f(s.sd))
 end
+
+lagrangian_mean_velocity(s::StreamingComputational{ParticleFlow}) = s.p.ϵ.^2*(velocity(s.s̄2)+velocity(s.sd))
