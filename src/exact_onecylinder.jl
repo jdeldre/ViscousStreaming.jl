@@ -4,7 +4,6 @@ import Base: *, +
 using Interpolations
 #using FastGaussQuadrature
 #using LinearAlgebra
-using SpecialFunctions
 using ForwardDiff
 using DiffRules
 
@@ -13,54 +12,9 @@ import ForwardDiff:value,partials,derivative,extract_derivative
 import ViscousFlow:curl,vorticity,streamfunction
 
 
-export StreamingParams, FirstOrder, SecondOrder, SecondOrderMean, AnalyticalStreaming,
-        uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
+export uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
 
-"""
-    StreamingParams(ϵ,Re)
 
-Set the parameters for the streaming solution. The problem is scaled so
-that the radius of the cylinder is unity. Reynolds number is defined as Re = ΩR²/ν,
-where Ω is the angular frequency of the oscillatory motion, e.g. sin(Ωt).
-"""
-struct StreamingParams
-    ϵ :: Float64
-    Re :: Float64
-    γ² :: ComplexF64
-    γ :: ComplexF64
-    λ :: ComplexF64
-    λ² :: ComplexF64
-    H₀ :: ComplexF64
-    C :: ComplexF64
-  end
-
-function StreamingParams(ϵ::Number,Re::Number)
-        γ² = im*Re
-        γ = exp(im*π/4)*√Re
-        λ = √2*γ
-        λ² = 2*γ²
-        H₀ = hankelh1(0,γ)
-        C = hankelh1(2,γ)/H₀
-        StreamingParams(ϵ,Re,γ²,γ,λ,λ²,H₀,C)
-    end
-
-function Base.show(io::IO, p::StreamingParams) where {N}
-        println(io, "Streaming flow parameters with Re = $(p.Re), ϵ = $(p.ϵ)")
-end
-
-"""
-    ComplexFunc(f)
-
-Provides a wrapper for a function expected to return complex values, for use in
-dispatch in automatic differentiation with `ForwardDiff`.
-"""
-struct ComplexFunc{FT}
-    fcn::FT
-end
-
-function Base.show(io::IO, f::ComplexFunc)
-        println(io, "Complex function")
-end
 
 (f::ComplexFunc)(x) = f.fcn(x)
 
@@ -249,18 +203,7 @@ end
 
 #### Construct the first and second order solutions
 
-abstract type Analytical end
-
-struct FirstOrder <: Analytical
-    K  :: Integer
-    p  :: StreamingParams
-    Ψ₁ :: ComplexFunc
-    W₁ :: ComplexFunc
-    Ur₁ :: ComplexFunc
-    Uθ₁ :: ComplexFunc
-end
-
-function FirstOrder(p::StreamingParams)
+function FirstOrderSoln(p::StreamingParams)
 
     @create_dual(Y,1,p.γ,p.H₀,hankelh1)
 
@@ -282,48 +225,39 @@ function FirstOrder(p::StreamingParams)
     println("BC residual on Ψ₁(1) = ",abs(bcresid1))
     println("BC residual on dΨ₁(1) = ",abs(bcresid2))
 
-    return FirstOrder(K,p,Ψ₁,W₁,Ur₁,Uθ₁)
+    return AsymptoticAnalytical{FirstOrder}(K,p,Ψ₁,W₁,Ur₁,Uθ₁)
 
 end
 
-function Base.show(io::IO, s::FirstOrder)
+function Base.show(io::IO, s::AsymptoticAnalytical{FirstOrder})
         println(io, "First-order analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
 
-function vorticity(x,y,t,s::FirstOrder)
+function vorticity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
   r = sqrt(x^2+y^2)
-  return real(-s.W₁(r)*y/r*exp.(-im*t))
+  return real(-s.W(r)*y/r*exp.(-im*t))
 end
-function uvelocity(x,y,t,s::FirstOrder)
+function uvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
-    return real.((s.Ur₁(r)*coseval^2-s.Uθ₁(r)*sineval^2)*exp.(-im*t))
+    return real.((s.Ur(r)*coseval^2-s.Uθ₁(r)*sineval^2)*exp.(-im*t))
 end
-function vvelocity(x,y,t,s::FirstOrder)
+function vvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
-    return real.((s.Ur₁(r)+s.Uθ₁(r))*coseval*sineval*exp.(-im*t))
+    return real.((s.Ur(r)+s.Uθ(r))*coseval*sineval*exp.(-im*t))
 end
-function streamfunction(x,y,t,s::FirstOrder)
+function streamfunction(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
-    return real(s.Ψ₁(r)*y/r*exp.(-im*t))
+    return real(s.Ψ(r)*y/r*exp.(-im*t))
 end
 
 # second order mean
 
-struct SecondOrderMean <: Analytical
-    K  :: Integer
-    p  :: StreamingParams
-    Ψ₂ :: ComplexFunc
-    W₂ :: ComplexFunc
-    Ur₂ :: ComplexFunc
-    Uθ₂ :: ComplexFunc
-end
-
-function SecondOrderMean(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -360,64 +294,54 @@ function SecondOrderMean(p::StreamingParams;n1inf=100000,n120=400000)
   println("BC residual on Ψs₂(1) = ",abs(bcresids1))
   println("BC residual on dΨs₂(1) = ",abs(bcresids2))
 
-  return SecondOrderMean(K,p,Ψs₂,Ws₂,Usr₂, Usθ₂)
+  return AsymptoticAnalytical{SecondOrderMean}(K,p,Ψs₂,Ws₂,Usr₂, Usθ₂)
 end
 
-function Base.show(io::IO, s::SecondOrderMean)
+function Base.show(io::IO, s::AsymptoticAnalytical{SecondOrderMean})
         println(io, "Second-order mean part of analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
 
-function vorticity(x,y,s::SecondOrderMean)
+function vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
     r = sqrt(x^2+y^2)
     sin2eval = 2*x*y/r^2
-    return real(-s.W₂(r))*sin2eval
+    return real(-s.W(r))*sin2eval
 end
-function uvelocity(x,y,s::SecondOrderMean)
+function uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur₂(r))*cos2eval
-    uθ = real.(s.Uθ₂(r))*sin2eval
+    ur = real.(s.Ur(r))*cos2eval
+    uθ = real.(s.Uθ(r))*sin2eval
     return ur*coseval .- uθ*sineval
 end
-function vvelocity(x,y,s::SecondOrderMean)
+function vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur₂(r))*cos2eval
-    uθ = real.(s.Uθ₂(r))*sin2eval
+    ur = real.(s.Ur(r))*cos2eval
+    uθ = real.(s.Uθ(r))*sin2eval
     return ur*sineval .+ uθ*coseval
 end
-function streamfunction(x,y,s::SecondOrderMean)
+function streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     sin2eval = 2*coseval*sineval
-    return real(s.Ψ₂(r))*sin2eval
+    return real(s.Ψ(r))*sin2eval
 end
 
-vorticity(x,y,t,s::SecondOrderMean) = vorticity(x,y,s::SecondOrderMean)
-uvelocity(x,y,t,s::SecondOrderMean) = uvelocity(x,y,s::SecondOrderMean)
-vvelocity(x,y,t,s::SecondOrderMean) = vvelocity(x,y,s::SecondOrderMean)
-streamfunction(x,y,t,s::SecondOrderMean) = streamfunction(x,y,s::SecondOrderMean)
+vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
 
 
-# second order unsteady
-struct SecondOrder <: Analytical
-    K  :: Integer
-    p  :: StreamingParams
-    Ψ₂ :: ComplexFunc
-    W₂ :: ComplexFunc
-    Ur₂ :: ComplexFunc
-    Uθ₂ :: ComplexFunc
-end
-
-function SecondOrder(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -465,78 +389,72 @@ function SecondOrder(p::StreamingParams;n1inf=100000,n120=400000)
   println("BC residual on Ψ₂(1) = ",abs(bcresid1))
   println("BC residual on dΨ₂(1) = ",abs(bcresid2))
 
-  return SecondOrder(K,p,Ψ₂,W₂,Ur₂, Uθ₂)
+  return AsymptoticAnalytical{SecondOrder}(K,p,Ψ₂,W₂,Ur₂, Uθ₂)
 end
 
-function Base.show(io::IO, s::SecondOrder)
+function Base.show(io::IO, s::AsymptoticAnalytical{SecondOrder})
         println(io, "Second-order oscillatory part of analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
 
-function vorticity(x,y,t,s::SecondOrder)
+function vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
     sin2eval = 2*x*y/r^2
-    return real(-s.W₂(r)*exp.(-2im*t))*sin2eval
+    return real(-s.W(r)*exp.(-2im*t))*sin2eval
 end
-function uvelocity(x,y,t,s::SecondOrder)
+function uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur₂(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ₂(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
     return ur*coseval .- uθ*sineval
 end
-function vvelocity(x,y,t,s::SecondOrder)
+function vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur₂(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ₂(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
     return ur*sineval .+ uθ*coseval
 end
-function streamfunction(x,y,t,s::SecondOrder)
+function streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
     sin2eval = 2*coseval*sineval
-    return real(s.Ψ₂(r)*exp.(-2im*t))*sin2eval
+    return real(s.Ψ(r)*exp.(-2im*t))*sin2eval
 end
 
 ### all together
-struct AnalyticalStreaming
-  p :: StreamingParams
-  s1 :: FirstOrder
-  s2s :: SecondOrderMean
-  s2 :: SecondOrder
-end
 
-AnalyticalStreaming(p) = AnalyticalStreaming(p,FirstOrder(p),SecondOrderMean(p),SecondOrder(p))
+StreamingAnalytical(p) = StreamingAnalytical(p,
+                  FirstOrderSoln(p),SecondOrderMeanSoln(p),SecondOrderSoln(p))
 
-function Base.show(io::IO, s::AnalyticalStreaming)
+function Base.show(io::IO, s::StreamingAnalytical)
         println(io, "Analytical streaming flow solution for")
         println(io, "single cylinder with Re = $(s.p.Re), ϵ = $(s.p.ϵ)")
 end
 
 # convenience functions
-params(s::T) where {T <: Analytical} = s.p
 
-firstorder(s::AnalyticalStreaming) = s.s1
-secondordermean(s::AnalyticalStreaming) = s.s2s
-secondorder(s::AnalyticalStreaming) = s.s2
+firstorder(s::StreamingAnalytical) = s.s1
+secondordermean(s::StreamingAnalytical) = s.s2s
+secondorder(s::StreamingAnalytical) = s.s2
 
 
-vorticity(x,y,t,s::AnalyticalStreaming) =
+vorticity(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*vorticity(x,y,t,s.s1) + s.p.ϵ^2*(vorticity(x,y,s.s2s)+vorticity(x,y,t,s.s2))
 
-uvelocity(x,y,t,s::AnalyticalStreaming) =
+uvelocity(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*uvelocity(x,y,t,s.s1) + s.p.ϵ^2*(uvelocity(x,y,s.s2s)+uvelocity(x,y,t,s.s2))
 
-vvelocity(x,y,t,s::AnalyticalStreaming) =
+vvelocity(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*vvelocity(x,y,t,s.s1) + s.p.ϵ^2*(vvelocity(x,y,s.s2s)+vvelocity(x,y,t,s.s2))
 
-streamfunction(x,y,t,s::AnalyticalStreaming) =
+streamfunction(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*streamfunction(x,y,t,s.s1) + s.p.ϵ^2*(streamfunction(x,y,s.s2s)+streamfunction(x,y,t,s.s2))

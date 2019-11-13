@@ -4,6 +4,8 @@ Routines for the frequency domain solution
 
 import Base: size
 
+export FrequencyStreaming
+
 abstract type StreamingSystem{NX,NY,N} end
 
 # some convenience functions, which should be defined generally in ViscousFlow
@@ -151,6 +153,7 @@ end
 
 function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) where {NX,NY,N,T<:Number}
 
+    p = StreamingParams(sys.Re,sys.ϵ)
     Ω = 1.0
 
     w1 = Nodes(Dual,size(sys),dtype=ComplexF64)
@@ -174,78 +177,71 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     ω₁ = vorticity(w1,sys)
     ψ₁ = streamfunction(w1,sys)
     u₁ = velocity(w1,sys)
-    soln1 = FirstOrderComputational(sys.Re,sys.ϵ,Ω,sys.grid,ω₁,ψ₁,u₁)
+    soln1 = AsymptoticComputational{FirstOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
+                                              ω₁,ψ₁,u₁)
 
     # construct drift flow
     udual = Nodes(Dual,w1)
     vdual = Nodes(Dual,w1)
     Fields.interpolate!(udual,u₁.u)
     Fields.interpolate!(vdual,u₁.v)
-    sd = 0.5im/Ω*udual∘conj(vdual)/cellsize(sys)
+    s̄d = 0.5im/Ω*udual∘conj(vdual)/cellsize(sys)
 
-    ψd = cellsize(sys)*sd
+    ψ̄d = cellsize(sys)*s̄d
+    ūd = curl(s̄d)
+    ω̄d = curl(ūd)/cellsize(sys)
+
+    sdsoln = AsymptoticComputational{SecondOrderMean,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
+                                              ω̄d,ψ̄d,ūd)
+
+    # Compute the drift velocity on the oscillator wall, to be used as
+    # boundary condition for the second-order solution
+    ūdb = sys.Emat*ūd
+
+    # unsteady part of drift, used for second-order unsteady boundary condition
+    sd = 0.5im/Ω*udual∘vdual/cellsize(sys)
     ud = curl(sd)
-    ωd = curl(ud)/cellsize(sys)
     udb = sys.Emat*ud
 
-    sdsoln = SecondOrderMeanComputational(sys.Re,sys.ϵ,Ω,sys.grid,ωd,ψd,ud)
-
     # second-order mean solution
-    rhs₂ = deepcopy((Re*Ūr₂(w1,sys),-udb))
-    w2, f2 = sys.S₂\rhs₂
+    rhs₂ = deepcopy((sys.Re*Ur₂(conj(u₁),w1,sys),-ūdb))
+    w̄2, f̄2 = sys.S₂\rhs₂
 
-    ω₂ = vorticity(sys.outside(w2),sys)
-    ψ₂ = streamfunction(sys.outside(w2),sys)
-    u₂ = velocity(sys.outside(w2),sys)
+    meansoln2 = AsymptoticComputational{SecondOrderMean,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
+                      vorticity(sys.outside(w̄2),sys),
+                      streamfunction(sys.outside(w̄2),sys),
+                      velocity(sys.outside(w̄2),sys))
 
-    soln2 = SecondOrderMeanComputational(sys.Re,sys.ϵ,Ω,sys.grid,ω₂,ψ₂,u₂)
+    # second-order unsteady solution
+    rhs₂ = deepcopy((sys.Re*Ur₂(u₁,w1,sys),-udb))
+    w2, f2 = sys.S₁\rhs₂
 
-    return soln1, soln2, sdsoln
+    soln2 = AsymptoticComputational{SecondOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
+                      vorticity(sys.outside(w2),sys),
+                      streamfunction(sys.outside(w2),sys),
+                      velocity(sys.outside(w2),sys))
+
+    return StreamingComputational{FluidFlow}(p,sys.grid,soln1,meansoln2,sdsoln,soln2)
 
 end
 
 # For a single body
-(sys::FrequencyStreaming{NX,NY,N})(U::Vector{T},body::Body) where {NX,NY,N,T<:Number} = sys([U],BodyList([body]))
+(sys::FrequencyStreaming{NX,NY,N})(U::Vector{T},body::Body) where {NX,NY,N,T<:Number} =
+                  sys([U],BodyList([body]))
 
-#=
-Types for holding the computational streaming solution
-=#
-
-abstract type StreamingComputational end
-
-struct FirstOrderComputational{NX,NY} <: StreamingComputational
-    Re :: Float64
-    ϵ :: Float64
-    Ω :: Float64
-    g :: PhysicalGrid{2}
-    W :: Nodes{Dual,NX,NY,ComplexF64}
-    Ψ :: Nodes{Dual,NX,NY,ComplexF64}
-    U :: Edges{Primal,NX,NY,ComplexF64}
-end
-
-struct SecondOrderMeanComputational{NX,NY} <: StreamingComputational
-    Re :: Float64
-    ϵ :: Float64
-    Ω :: Float64
-    g :: PhysicalGrid{2}
-    W :: Nodes{Dual,NX,NY,ComplexF64}
-    Ψ :: Nodes{Dual,NX,NY,ComplexF64}
-    U :: Edges{Primal,NX,NY,ComplexF64}
-end
 
 
 #=
 right-hand side functions
 =#
 
-function Ūr₂(w::Nodes{Dual,NX,NY,ComplexF64},sys::FrequencyStreaming{NX,NY}) where {NX,NY}
+# second-order rhs
+function Ur₂(q::Edges{Primal,NX,NY,ComplexF64},w::Nodes{Dual,NX,NY,ComplexF64},sys::FrequencyStreaming{NX,NY}) where {NX,NY}
 
   Ww = Edges(Dual,w)
   Qq = Edges(Dual,w)
   Δx = cellsize(sys)
 
-  Fields.interpolate!(Qq,curl(sys.L\conj(w))) # -velocity, on dual edges
-
-  return 0.5*Δx*divergence(Qq∘Fields.interpolate!(Ww,w)) # -0.5*∇⋅(wu)
+  return -0.5*Δx*divergence(Fields.interpolate!(Qq,q)∘Fields.interpolate!(Ww,w)) # -0.5*∇⋅(wu)
 
 end
