@@ -245,3 +245,32 @@ function Ur₂(q::Edges{Primal,NX,NY,ComplexF64},w::Nodes{Dual,NX,NY,ComplexF64}
   return -0.5*Δx*divergence(Fields.interpolate!(Qq,q)∘Fields.interpolate!(Ww,w)) # -0.5*∇⋅(wu)
 
 end
+
+#=
+evaluation functions that generate discrete data
+=#
+vorticity(t,s::AsymptoticComputational{FirstOrder,FluidFlow}) = real(s.W*exp(im*s.Ω*t))
+streamfunction(t,s::AsymptoticComputational{FirstOrder,FluidFlow}) = real(s.Ψ*exp(im*s.Ω*t))
+velocity(t,s::AsymptoticComputational{FirstOrder}) = real(s.U*exp(im*s.Ω*t))
+
+# second order mean
+vorticity(s::AsymptoticComputational{SecondOrderMean,FluidFlow}) = real(s.W)
+streamfunction(s::AsymptoticComputational{SecondOrderMean,FluidFlow}) = real(s.Ψ)
+velocity(s::AsymptoticComputational{SecondOrderMean}) = real(s.U)
+
+# second order unsteady
+vorticity(t,s::AsymptoticComputational{SecondOrder,FluidFlow}) = real(s.W*exp(2im*s.Ω*t))
+streamfunction(t,s::AsymptoticComputational{SecondOrder,FluidFlow}) = real(s.Ψ*exp(2im*s.Ω*t))
+velocity(t,s::AsymptoticComputational{SecondOrder}) = real(s.U*exp(2im*s.Ω*t))
+
+# assembly of asymptotic solutions
+for f in (:vorticity,:streamfunction,:velocity)
+  @eval $f(t,s::StreamingComputational{FluidFlow}) =
+      s.p.ϵ*$f(t,s.s1) + s.p.ϵ^2*($f(s.s̄2)+$f(t,s.s2))
+end
+
+for f in (:vorticity,:streamfunction,:velocity)
+  fmean = Symbol("lagrangian_mean_",f)
+  @eval export $fmean
+  @eval $fmean(s::StreamingComputational{FluidFlow}) = s.p.ϵ^2*($f(s.s̄2)+$f(s.sd))
+end
