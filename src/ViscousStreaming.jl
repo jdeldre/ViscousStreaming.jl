@@ -5,7 +5,7 @@ module ViscousStreaming
 
   @reexport using ViscousFlow
 
-  export params, StreamingParams, StreamingAnalytical
+  export params, StreamingParams, StreamingAnalytical, StreamingComputational
 
   abstract type OrderType end
   abstract type FirstOrder <: OrderType end
