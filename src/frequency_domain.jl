@@ -142,13 +142,15 @@ function FrequencyStreaming(Re, ϵ, Δx,
     #=
     Second-order mean system
     =#
-    B2₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\outside(w))))
-    A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
+    #B2₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\outside(w))))
+    #A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
+    B2₂(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = E*(Curl()*s)
+    A2⁻¹(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\(L\s))
 
     # Set up saddle point systems
 
-    S₁ = SaddleSystem((w,f),(A1⁻¹,B1₁ᵀ,B1₂),issymmetric=true,store=true)
-    S₂ = SaddleSystem((w,f),(A2⁻¹,B1₁ᵀ,B2₂),issymmetric=true,store=true)
+    S₁ = SaddleSystem((w,f),(A1⁻¹,B1₁ᵀ,B1₂),issymmetric=false,store=true)
+    S₂ = SaddleSystem((w,f),(A2⁻¹,B1₁ᵀ,B2₂),issymmetric=false,store=true)
 
     return FrequencyStreaming{NX,NY,N}(Re,ϵ,g,L,LH,X,regop,H,E,inside,outside,dlayer,S₁,S₂)
 end
@@ -177,8 +179,8 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     w1, f1 = sys.S₁\rhs₁
 
     ω₁ = vorticity(w1,sys)
-    ψ₁ = streamfunction(w1,sys)
-    u₁ = velocity(w1,sys)
+    ψ₁ = streamfunction(sys.outside(w1),sys)
+    u₁ = velocity(sys.outside(w1),sys)
     soln1 = AsymptoticComputational{FirstOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
                                               ω₁,ψ₁,u₁)
 
@@ -206,7 +208,7 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     udb = sys.Emat*ud
 
     # second-order mean solution
-    rhs₂ = deepcopy((sys.Re*Ur₂(conj(u₁),w1,sys),-ūdb))
+    rhs₂ = deepcopy((sys.Re*Ur₂(conj(u₁),sys.outside(w1),sys),-ūdb))
     w̄2, f̄2 = sys.S₂\rhs₂
 
     meansoln2 = AsymptoticComputational{SecondOrderMean,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
