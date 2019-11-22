@@ -142,10 +142,12 @@ function FrequencyStreaming(Re, ϵ, Δx,
     #=
     Second-order mean system
     =#
-    #B2₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\outside(w))))
-    #A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
-    B2₂(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = E*(Curl()*s)
-    A2⁻¹(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\(L\s))
+    B2₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\outside(w))))
+    A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
+
+    # For solving for streamfunction. In development still...
+    #B2₂(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = E*(Curl()*s)
+    #A2⁻¹(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\(L\s))
 
     # Set up saddle point systems
 
