@@ -180,9 +180,12 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
 
     w1, f1 = sys.S₁\rhs₁
 
+    #ω₁ = vorticity(sys.outside(w1),sys)
+    #ψ₁ = streamfunction(sys.outside(w1),sys) # works better when solving for 2nd-order streamfunction directly
+    #u₁ = velocity(sys.outside(w1),sys) # works better when solving for 2nd-order streamfunction directly
     ω₁ = vorticity(w1,sys)
-    ψ₁ = streamfunction(sys.outside(w1),sys)
-    u₁ = velocity(sys.outside(w1),sys)
+    ψ₁ = streamfunction(w1,sys)
+    u₁ = velocity(w1,sys)
     soln1 = AsymptoticComputational{FirstOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
                                               ω₁,ψ₁,u₁)
 
@@ -219,7 +222,7 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
                       velocity(sys.outside(w̄2),sys))
 
     # second-order unsteady solution
-    rhs₂ = deepcopy((sys.Re*Ur₂(u₁,w1,sys),-udb))
+    rhs₂ = deepcopy((sys.Re*Ur₂(u₁,sys.outside(w1),sys),-udb))
     w2, f2 = sys.S₁\rhs₂
 
     soln2 = AsymptoticComputational{SecondOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
