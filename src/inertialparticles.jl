@@ -226,13 +226,13 @@ function saffman(u::Edges{Primal},ω::Nodes{Dual})
 
     uxnode = Nodes(Dual,ω)
     uynode = Nodes(Dual,ω)
-    ViscousFlow.interpolate!(Ls.u,ViscousFlow.interpolate!(uynode, u.v) ∘ ω)
-    ViscousFlow.interpolate!(Ls.v,ViscousFlow.interpolate!(uxnode,-u.u) ∘ ω)
+    grid_interpolate!(Ls.u,grid_interpolate!(uynode, u.v) ∘ ω)
+    grid_interpolate!(Ls.v,grid_interpolate!(uxnode,-u.u) ∘ ω)
 
     ωx = zero(u.u)
     ωy = zero(u.v)
-    ViscousFlow.interpolate!(ωx,ω)  # vorticity on primal x edges
-    ViscousFlow.interpolate!(ωy,ω)  # vorticity on primal y edges
+    grid_interpolate!(ωx,ω)  # vorticity on primal x edges
+    grid_interpolate!(ωy,ω)  # vorticity on primal y edges
 
     #Ls.u .*= 3sqrt(3)/(2π^2)*J∞./(ωx.^2 .+ 1e-15).^(1/4)
     #Ls.v .*= 3sqrt(3)/(2π^2)*J∞./(ωy.^2 .+ 1e-15).^(1/4)
@@ -275,23 +275,23 @@ function saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{Dual,NX,NY,ComplexF
   b0 = similar(u)
   b2 = similar(u)
 
-  ViscousFlow.interpolate!(b0.u,b0_node)  # primal x edges
-  ViscousFlow.interpolate!(b0.v,b0_node)
-  ViscousFlow.interpolate!(b2.u,b2_node)  # primal y edges
-  ViscousFlow.interpolate!(b2.v,b2_node)
+  grid_interpolate!(b0.u,b0_node)  # primal x edges
+  grid_interpolate!(b0.v,b0_node)
+  grid_interpolate!(b2.u,b2_node)  # primal y edges
+  grid_interpolate!(b2.v,b2_node)
 
   a0 = similar(u)
   a2 = similar(u)
 
   uxnode = Nodes(Dual,ω,dtype=ComplexF64)
   uynode = Nodes(Dual,ω,dtype=ComplexF64)
-  ViscousFlow.interpolate!(uynode, u.v)
-  ViscousFlow.interpolate!(uxnode,-u.u)
+  grid_interpolate!(uynode, u.v)
+  grid_interpolate!(uxnode,-u.u)
 
-  ViscousFlow.interpolate!(a0.u, uynode ∘ conj(ω))
-  ViscousFlow.interpolate!(a0.v, uxnode ∘ conj(ω))
-  ViscousFlow.interpolate!(a2.u, uynode ∘ ω)
-  ViscousFlow.interpolate!(a2.v, uxnode ∘ ω)
+  grid_interpolate!(a0.u, uynode ∘ conj(ω))
+  grid_interpolate!(a0.v, uxnode ∘ conj(ω))
+  grid_interpolate!(a2.u, uynode ∘ ω)
+  grid_interpolate!(a2.v, uxnode ∘ ω)
 
   Ls0 = 0.5*(a0 ∘ b0 + conj(a0) ∘ b0 + conj(a2) ∘ b2)
   Ls2 = 0.5*(a0 ∘ b2 + conj(a0) ∘ b2 + b0 ∘ a2 + conj(b0) ∘ a2)

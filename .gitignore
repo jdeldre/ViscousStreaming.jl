@@ -1,0 +1,5 @@
+cache
+*.ipynb
+Manifest.toml
+notebooks/*.jld
+notebooks/CFD_data

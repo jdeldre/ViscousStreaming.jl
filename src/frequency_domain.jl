@@ -192,8 +192,8 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     # construct drift flow
     udual = Nodes(Dual,w1)
     vdual = Nodes(Dual,w1)
-    Fields.interpolate!(udual,u₁.u)
-    Fields.interpolate!(vdual,u₁.v)
+    Fields.grid_interpolate!(udual,u₁.u)
+    Fields.grid_interpolate!(vdual,u₁.v)
     s̄d = 0.5im/Ω*udual∘conj(vdual)/cellsize(sys)
 
     ψ̄d = cellsize(sys)*s̄d
@@ -251,7 +251,7 @@ function Ur₂(q::Edges{Primal,NX,NY,ComplexF64},w::Nodes{Dual,NX,NY,ComplexF64}
   Qq = Edges(Dual,w)
   Δx = cellsize(sys)
 
-  return -0.5*Δx*divergence(Fields.interpolate!(Qq,q)∘Fields.interpolate!(Ww,w)) # -0.5*∇⋅(wu)
+  return -0.5*Δx*divergence(grid_interpolate!(Qq,q)∘grid_interpolate!(Ww,w)) # -0.5*∇⋅(wu)
 
 end
 

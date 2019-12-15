@@ -2,10 +2,11 @@
 
 using OrdinaryDiffEq
 using DiffEqCallbacks # for manifold projection
+using Interpolations
 
 export compute_trajectory
 
-function compute_trajectory(vfcn,X₀::Tuple,Tmax::Real,Δt::Real;bl::BodyList=BodyList(),ϵ::Real=0.0)
+function compute_trajectory(vfcn::Function,X₀::Tuple,Tmax::Real,Δt::Real;bl::BodyList=BodyList(),ϵ::Real=0.0)
 
   u0 = [X₀[1],X₀[2]]
   tspan=(0.0,Tmax)
@@ -23,8 +24,10 @@ function compute_trajectory(vfcn,X₀::Tuple,Tmax::Real,Δt::Real;bl::BodyList=B
   return sol
 end
 
-compute_trajectory(vfcn,X₀::Tuple,Tmax::Real,Δt::Real,body::Body;ϵ::Real=0.0) =
+compute_trajectory(vfcn::Function,X₀::Tuple,Tmax::Real,Δt::Real,body::Body;ϵ::Real=0.0) =
       compute_trajectory(vfcn,X₀,Tmax,Δt;bl=BodyList([body]),ϵ=ϵ)
+
+
 
 
 # This is the function that is constrained to be zero by manifold projection
