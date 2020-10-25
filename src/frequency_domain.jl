@@ -2,9 +2,12 @@
 Routines for the frequency domain solution
 =#
 
-import Base: size
+import Base: size, \, *
 import ViscousFlow:curl,vorticity,streamfunction, velocity
+import CartesianGrids: cellsize, origin, product!
 
+using ImmersedLayers
+import ImmersedLayers: MaskType, DoubleLayer, Mask, ComplementaryMask
 
 export FrequencyStreaming
 
@@ -31,7 +34,7 @@ size(sys::StreamingSystem{NX,NY}) where {NX,NY} = (size(sys,1),size(sys,2))
 
 Return the grid cell size of system `sys`
 """
-Fields.cellsize(sys::StreamingSystem) = cellsize(sys.grid)
+cellsize(sys::StreamingSystem) = cellsize(sys.grid)
 
 """
     origin(sys::StreamingSystem) -> Tuple{Int,Int}
@@ -42,7 +45,7 @@ indices need not lie inside the range of indices occupied by the grid.
 For example, if the range of physical coordinates occupied by the grid
 is (1.0,3.0) x (2.0,4.0), then the origin is not inside the grid.
 """
-Fields.origin(sys::StreamingSystem) = origin(sys.grid)
+origin(sys::StreamingSystem) = origin(sys.grid)
 
 
 """
@@ -54,7 +57,7 @@ and then inverting the operators.
 
 # Constructors
 
-- `FrequencyStreaming(Re, ϵ, Δx, xlimits, ylimits, b, [ddftype=Fields.Goza])`
+- `FrequencyStreaming(Re, ϵ, Δx, xlimits, ylimits, b, [ddftype=CartesianGrids.Goza])`
 where `b` is either a single `Body` or a `BodyList`.
 
 # Use
@@ -73,14 +76,14 @@ struct FrequencyStreaming{NX,NY,N} <: StreamingSystem{NX,NY,N}
     ϵ::Float64
 
     "Grid metadata"
-    grid::Fields.PhysicalGrid{2}
+    grid::CartesianGrids.PhysicalGrid{2}
 
     # Operators
     "Laplacian operator"
-    L::Fields.Laplacian{NX,NY}
+    L::CartesianGrids.Laplacian{NX,NY}
 
     "Helmholtz operator"
-    LH::Fields.Helmholtz{NX,NY}
+    LH::CartesianGrids.Helmholtz{NX,NY}
 
     "Body coordinate data"
     X::VectorData{N,Float64}
@@ -103,7 +106,7 @@ end
 
 function FrequencyStreaming(Re, ϵ, Δx,
                             xlimits::Tuple{Real,Real},ylimits::Tuple{Real,Real},
-                            b::Union{Body,BodyList}; ddftype=Fields.Goza)
+                            b::Union{Body,BodyList}; ddftype=CartesianGrids.Goza)
 
     X = VectorData(collect(b))
 
@@ -126,8 +129,8 @@ function FrequencyStreaming(Re, ϵ, Δx,
     H, E = RegularizationMatrix(regop,VectorData(X,dtype=ComplexF64),Edges(Primal,(NX,NY),dtype=ComplexF64))
 
     # construct masks and double layer operator
-    dlayer = DoubleLayer(b,regop,w)
-    inside = Mask(dlayer)
+    dlayer = DoubleLayer(b,g,w,ddftype=CartesianGrids.Goza)
+    inside = Mask(dlayer,g)
     outside = ComplementaryMask(inside)
 
 
@@ -137,22 +140,24 @@ function FrequencyStreaming(Re, ϵ, Δx,
     =#
     B1₁ᵀ(f::VectorData{N,T}) where {N,T} = Curl()*(H*f)
     B1₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\w)))
-    A1⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = LH\w
+    #A1⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = LH\w
 
     #=
     Second-order mean system
     =#
     B2₂(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(E*(Curl()*(L\outside(w))))
-    A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
+    A2 = A2Operator(L,outside)
+    #A2⁻¹(w::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\outside(w))
 
     # For solving for streamfunction. In development still...
     #B2₂(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = E*(Curl()*s)
     #A2⁻¹(s::Nodes{Dual,NX,NY,T}) where {NX,NY,T} = -(L\(L\s))
 
     # Set up saddle point systems
-
-    S₁ = SaddleSystem((w,f),(A1⁻¹,B1₁ᵀ,B1₂),issymmetric=false,store=true)
-    S₂ = SaddleSystem((w,f),(A2⁻¹,B1₁ᵀ,B2₂),issymmetric=false,store=true)
+    S₁ = SaddleSystem(LH,B1₂,B1₁ᵀ,SaddleVector(w,f),eltype=ComplexF64)
+    S₂ = SaddleSystem(A2,B2₂,B1₁ᵀ,SaddleVector(w,f),eltype=ComplexF64)
+    #S₁ = SaddleSystem((w,f),(A1⁻¹,B1₁ᵀ,B1₂),issymmetric=false,store=true)
+    #S₂ = SaddleSystem((w,f),(A2⁻¹,B1₁ᵀ,B2₂),issymmetric=false,store=true)
 
     return FrequencyStreaming{NX,NY,N}(Re,ϵ,g,L,LH,X,regop,H,E,inside,outside,dlayer,S₁,S₂)
 end
@@ -164,8 +169,12 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
 
     w1 = Nodes(Dual,size(sys),dtype=ComplexF64)
     w2 = Nodes(Dual,size(sys),dtype=ComplexF64)
+    w̄2 = Nodes(Dual,size(sys),dtype=ComplexF64)
+
     f1 = VectorData(sys.X,dtype=ComplexF64)
     f2 = VectorData(sys.X,dtype=ComplexF64)
+    f̄2 = VectorData(sys.X,dtype=ComplexF64)
+
 
     # first-order solution
     Ur₁ = zero(w1)
@@ -176,9 +185,11 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
         fill!(ui,U[i][1])
         fill!(vi,U[i][2])
     end
-    rhs₁ = deepcopy((Ur₁,Fr₁))
+    #rhs₁ = deepcopy((Ur₁,Fr₁))
+    rhs₁ = SaddleVector(deepcopy(Ur₁),deepcopy(Fr₁))
+    sol₁ = SaddleVector(w1, f1)
 
-    w1, f1 = sys.S₁\rhs₁
+    sol₁ .= sys.S₁\rhs₁
 
     #ω₁ = vorticity(sys.outside(w1),sys)
     #ψ₁ = streamfunction(sys.outside(w1),sys) # works better when solving for 2nd-order streamfunction directly
@@ -192,8 +203,8 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     # construct drift flow
     udual = Nodes(Dual,w1)
     vdual = Nodes(Dual,w1)
-    Fields.grid_interpolate!(udual,u₁.u)
-    Fields.grid_interpolate!(vdual,u₁.v)
+    CartesianGrids.grid_interpolate!(udual,u₁.u)
+    CartesianGrids.grid_interpolate!(vdual,u₁.v)
     s̄d = 0.5im/Ω*udual∘conj(vdual)/cellsize(sys)
 
     ψ̄d = cellsize(sys)*s̄d
@@ -213,8 +224,10 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
     udb = sys.Emat*ud
 
     # second-order mean solution
-    rhs₂ = deepcopy((sys.Re*Ur₂(conj(u₁),sys.outside(w1),sys),-ūdb))
-    w̄2, f̄2 = sys.S₂\rhs₂
+    #rhs₂ = deepcopy((sys.Re*Ur₂(conj(u₁),sys.outside(w1),sys),-ūdb))
+    rhs₂ = SaddleVector(sys.Re*Ur₂(conj(u₁),sys.outside(w1),sys),-ūdb)
+    sol₂ = SaddleVector(w̄2, f̄2)
+    sol₂ .= sys.S₂\rhs₂
 
     meansoln2 = AsymptoticComputational{SecondOrderMean,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
                       vorticity(sys.outside(w̄2),sys),
@@ -222,8 +235,10 @@ function (sys::FrequencyStreaming{NX,NY,N})(U::Vector{Vector{T}},bl::BodyList) w
                       velocity(sys.outside(w̄2),sys))
 
     # second-order unsteady solution
-    rhs₂ = deepcopy((sys.Re*Ur₂(u₁,sys.outside(w1),sys),-udb))
-    w2, f2 = sys.S₁\rhs₂
+    #rhs₂ = deepcopy((sys.Re*Ur₂(u₁,sys.outside(w1),sys),-udb))
+    rhs₂ = SaddleVector(sys.Re*Ur₂(u₁,sys.outside(w1),sys),-udb)
+    sol₂ = SaddleVector(w2, f2)
+    sol₂ .= sys.S₁\rhs₂
 
     soln2 = AsymptoticComputational{SecondOrder,FluidFlow,NX,NY}(sys.Re,sys.ϵ,Ω,sys.grid,
                       vorticity(sys.outside(w2),sys),
@@ -238,6 +253,21 @@ end
 (sys::FrequencyStreaming{NX,NY,N})(U::Vector{T},body::Body) where {NX,NY,N,T<:Number} =
                   sys([U],BodyList([body]))
 
+
+function streamfunction(w::Nodes{Dual},sys::FrequencyStreaming)
+  ψ = -cellsize(sys)*(sys.L\w)
+  return ψ
+end
+
+#=
+Define the upper left operator in 2nd-order system
+=#
+struct A2Operator{F,T}
+  op :: F
+  mask :: T
+end
+\(A::A2Operator,w::Nodes) = -(A.op\A.mask(w))
+*(A::A2Operator,w::Nodes) = w # identity, technically incorrect but never used in our example
 
 
 #=

@@ -24,6 +24,11 @@ end
 
 InertialParameters(;beta,tau,epsilon,Re) = InertialParameters(beta,tau,epsilon,Re)
 
+# The version in CartesianGrids is too restrictive, so include this less
+# restrictive one here
+@inline product!(out::Nodes{C,NX,NY,F}, p::Nodes{C,NX,NY,F},
+                  q::Nodes{C,NX,NY,F}) where {C,NX,NY,F} = (out .= p.*q)
+
 
 """
     inertial_velocity(ux::History{XEdges},uy::History{YEdges},
