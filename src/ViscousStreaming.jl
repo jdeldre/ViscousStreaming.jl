@@ -4,6 +4,7 @@ module ViscousStreaming
   using SpecialFunctions
 
   @reexport using ViscousFlow
+  #@reexport using ImmersedLayers
 
   export params, StreamingParams, StreamingAnalytical, StreamingComputational
 
