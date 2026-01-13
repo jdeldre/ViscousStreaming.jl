@@ -13,8 +13,11 @@ import ViscousFlow: vorticity,streamfunction
 import CartesianGrids: curl
 
 export uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
+export InertialFrame, CylinderFrame
 
-
+abstract type ReferenceFrame end
+struct InertialFrame <: ReferenceFrame end
+struct CylinderFrame <: ReferenceFrame end
 
 (f::ComplexFunc)(x) = f.fcn(x)
 
@@ -203,12 +206,19 @@ end
 
 #### Construct the first and second order solutions
 
-function FirstOrderSoln(p::StreamingParams)
+function FirstOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame})
 
     @create_dual(Y,1,p.γ,p.H₀,hankelh1)
 
     K = 1
-    Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
+    if RF == InertialFrame
+      Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
+    elseif RF == CylinderFrame
+      Ψ₁ = ComplexFunc(r -> -r - p.C/r + 2Y(r)/p.γ)
+    else 
+      error("Unknown reference frame type")
+    end
+    
     W₁ = D²(Ψ₁,K)  # note that this is actually the negative of the vorticity. We will account for this when we evaluate it.
     Ur₁, Uθ₁ = curl(Ψ₁,K)
 
@@ -219,8 +229,15 @@ function FirstOrderSoln(p::StreamingParams)
 
     # for verifying boundary conditions
     dΨ₁ = ComplexFunc(r -> derivative(Ψ₁,r))
-    bcresid1 = Ψ₁(1) - 1
-    bcresid2 = dΨ₁(1) - 1
+    if RF == InertialFrame
+      bcresid1 = Ψ₁(1) - 1
+      bcresid2 = dΨ₁(1) - 1
+    elseif RF == CylinderFrame
+      bcresid1 = Ψ₁(1)
+      bcresid2 = dΨ₁(1)
+    else 
+      error("Unknown reference frame type")
+    end
 
     println("BC residual on Ψ₁(1) = ",abs(bcresid1))
     println("BC residual on dΨ₁(1) = ",abs(bcresid2))
@@ -257,7 +274,7 @@ end
 
 # second order mean
 
-function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderMeanSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -267,15 +284,27 @@ function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
   K = 2
   fakefact = 1
   #f₀ = ComplexFunc(r -> -0.5*p.γ²*p.Re*(0.5*(p.C*conj(X(r))-conj(p.C)*X(r))/r^2 + X(r)*conj(Z(r)) - conj(X(r))*Z(r)))
-  f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
-
+  if RF == InertialFrame
+    f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
+  elseif RF == CylinderFrame
+    f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r)) - 0.5*conj(Z(r))))
+  else 
+    error("Unknown reference frame type")
+  end
   f̃₀ = ComplexFunc(r -> f₀(r) - 0.5*p.γ²*p.Re*(-0.5*conj(Z(r))+0.5*Z(r)))
   I⁻¹ = ComplexIntegral(r->f₀(r)/r,1,Inf,length=n1inf)
   I¹ = ComplexIntegral(r->f₀(r)*r,1,Inf,length=n1inf)
   I³ = ComplexIntegral(r->f₀(r)*r^3,1,20,length=n120)
   I⁵ = ComplexIntegral(r->f₀(r)*r^5,1,20,length=n120)
-  Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 - fakefact*0.25im*p.γ*Y(1) +
+  if RF == InertialFrame
+    Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 - fakefact*0.25im*p.γ*Y(1) +
   1/r^2*(-I⁵(r)/48-I⁻¹(1)/24+I¹(1)/16 + fakefact*0.25im*p.γ*Y(1)))
+  elseif RF == CylinderFrame
+    Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 +
+  1/r^2*(-I⁵(r)/48-I⁻¹(1)/24+I¹(1)/16))
+  else 
+    error("Unknown reference frame type")
+  end
   Ws₂ = D²(Ψs₂,K)
   Usr₂, Usθ₂ = curl(Ψs₂,K)
 
@@ -289,7 +318,13 @@ function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
   Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
   W₁ = D²(Ψ₁,K)
   bcresids1 = Ψs₂(1)
-  bcresids2 = real(dΨs₂(1) - 0.25im*W₁(1))
+  if RF == InertialFrame
+    bcresids2 = real(dΨs₂(1) + 0.25im*W₁(1))
+  elseif RF == CylinderFrame
+    bcresids2 = real(dΨs₂(1))
+  else 
+    error("Unknown reference frame type")
+  end
 
   println("BC residual on Ψs₂(1) = ",abs(bcresids1))
   println("BC residual on dΨs₂(1) = ",abs(bcresids2))
@@ -341,7 +376,7 @@ vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::Asy
 streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
 
 
-function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -354,7 +389,13 @@ function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
 
   K = 2
   fakefact = 1
-  g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
+  if RF == InertialFrame
+    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
+  elseif RF == CylinderFrame
+    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
+  else 
+    error("Unknown reference frame type")
+  end
 
   g̃₀ = ComplexFunc(r -> g₀(r) - 0.5*p.γ²*p.Re*Z(r))
 
@@ -432,8 +473,8 @@ end
 
 ### all together
 
-StreamingAnalytical(p) = StreamingAnalytical(p,
-                  FirstOrderSoln(p),SecondOrderMeanSoln(p),SecondOrderSoln(p))
+StreamingAnalytical(p, RF::Type{<:ReferenceFrame}) = StreamingAnalytical(p,
+                  FirstOrderSoln(p, RF),SecondOrderMeanSoln(p, RF),SecondOrderSoln(p, RF))
 
 function Base.show(io::IO, s::StreamingAnalytical)
         println(io, "Analytical streaming flow solution for")

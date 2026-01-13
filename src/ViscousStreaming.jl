@@ -47,7 +47,7 @@ module ViscousStreaming
           StreamingParams(ϵ,Re,Ω,γ²,γ,λ,λ²,H₀,C)
       end
 
-  function Base.show(io::IO, p::StreamingParams) where {N}
+  function Base.show(io::IO, p::StreamingParams) 
           println(io, "Streaming flow parameters with Re = $(p.Re), ϵ = $(p.ϵ)")
   end
 
@@ -74,17 +74,17 @@ module ViscousStreaming
       Uθ :: ComplexFunc
   end
 
-  struct AsymptoticComputational{O <: OrderType, F <: FlowType, NX,NY}
-      Re :: Float64
-      ϵ :: Float64
-      Ω :: Float64
-      g :: PhysicalGrid{2}
-      W :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
-      Ψ :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
-      U :: Edges{Primal,NX,NY,ComplexF64}
-  end
+  # struct AsymptoticComputational{O <: OrderType, F <: FlowType, NX,NY}
+  #     Re :: Float64
+  #     ϵ :: Float64
+  #     Ω :: Float64
+  #     g :: PhysicalGrid{2}
+  #     W :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
+  #     Ψ :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
+  #     U :: Edges{Primal,NX,NY,ComplexF64}
+  # end
 
-  Base.size(::AsymptoticComputational{O,F,NX,NY}) where {O,F,NX,NY} = NX, NY
+  # Base.size(::AsymptoticComputational{O,F,NX,NY}) where {O,F,NX,NY} = NX, NY
 
   abstract type StreamingSolution end
 
@@ -95,15 +95,14 @@ module ViscousStreaming
     s2 :: AsymptoticAnalytical{SecondOrder}
   end
 
-  struct StreamingComputational{F <: FlowType} <: StreamingSolution
-    p :: StreamingParams
-    g :: PhysicalGrid{2}
-    s1 :: AsymptoticComputational{FirstOrder,F}
-    s̄2 :: AsymptoticComputational{SecondOrderMean,F}
-    sd :: AsymptoticComputational{SecondOrderMean,F}
-    s2 :: Union{AsymptoticComputational{SecondOrder,F},Nothing}
-
-  end
+  # struct StreamingComputational{F <: FlowType} <: StreamingSolution
+  #   p :: StreamingParams
+  #   g :: PhysicalGrid{2}
+  #   s1 :: AsymptoticComputational{FirstOrder,F}
+  #   s̄2 :: AsymptoticComputational{SecondOrderMean,F}
+  #   sd :: AsymptoticComputational{SecondOrderMean,F}
+  #   s2 :: Union{AsymptoticComputational{SecondOrder,F},Nothing}
+  # end
 
   params(s::T) where {T <: StreamingSolution} = s.p
 
