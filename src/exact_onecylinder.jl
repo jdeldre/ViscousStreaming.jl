@@ -283,7 +283,6 @@ function SecondOrderMeanSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1in
 
   K = 2
   fakefact = 1
-  #f₀ = ComplexFunc(r -> -0.5*p.γ²*p.Re*(0.5*(p.C*conj(X(r))-conj(p.C)*X(r))/r^2 + X(r)*conj(Z(r)) - conj(X(r))*Z(r)))
   if RF == InertialFrame
     f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
   elseif RF == CylinderFrame
@@ -291,7 +290,6 @@ function SecondOrderMeanSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1in
   else 
     error("Unknown reference frame type")
   end
-  f̃₀ = ComplexFunc(r -> f₀(r) - 0.5*p.γ²*p.Re*(-0.5*conj(Z(r))+0.5*Z(r)))
   I⁻¹ = ComplexIntegral(r->f₀(r)/r,1,Inf,length=n1inf)
   I¹ = ComplexIntegral(r->f₀(r)*r,1,Inf,length=n1inf)
   I³ = ComplexIntegral(r->f₀(r)*r^3,1,20,length=n120)
@@ -392,13 +390,10 @@ function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=10
   if RF == InertialFrame
     g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
   elseif RF == CylinderFrame
-    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
+    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2 - 0.5 * p.Re * p.γ² * Z(r))
   else 
     error("Unknown reference frame type")
   end
-
-  g̃₀ = ComplexFunc(r -> g₀(r) - 0.5*p.γ²*p.Re*Z(r))
-
 
   Kλ = ComplexFunc(r -> H11(1)*H22(r) - H12(1)*H21(r))
 
@@ -411,14 +406,20 @@ function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=10
   Ig² = ComplexFunc(r -> 0.25im*π/(p.λ²*H11(1))*IH21gr(r)*Kλ(r))
   Ig³ = ComplexFunc(r -> 1/(p.λ²*p.λ*H11(1))*((H21(r)-H21(1)/r^2)*Igr⁻¹(1)+IH21gr(1)/r^2))
   Ig⁴ = ComplexFunc(r -> -0.25/p.λ²*(Igr⁻¹(r)*r^2-Igr⁻¹(1)/r^2+Igr³(r)/r^2))
-  Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r) + fakefact*0.5im/sqrt(2)*Y(1)/H11(1)*(H21(r)-H21(1)/r^2))
-
-  Ψ̃₂ = ComplexFunc(r -> Ψ₂(r)+ 0.5im*(-p.C/r^2 + Z(r))) # cylinder-fixed reference frame... not used
+  if RF == InertialFrame
+    Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r) + fakefact*0.5im/sqrt(2)*Y(1)/H11(1)*(H21(r)-H21(1)/r^2))
+  elseif RF == CylinderFrame
+    # Ψ₂ = ComplexFunc(r -> Ψ₂(r)+ 0.5im*(-p.C/r^2 + Z(r))) # cylinder-fixed reference frame... not used
+    Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r)) 
+  else 
+    error("Unknown reference frame type")
+  end
   W₂ = D²(Ψ₂,K)
   Ur₂, Uθ₂ = curl(Ψ₂,K);
 
   # for verifying the solution
   LW₂ = D²(W₂,K);
+  println("Verifying second-order oscillatory solution...")
   resid = ComplexFunc(r -> LW₂(r)+2im*p.Re*W₂(r)-g₀(r))
   println("Maximum residual on W₂ = ",maximum(abs.(resid.(range(1,5,length=10)))))
 
