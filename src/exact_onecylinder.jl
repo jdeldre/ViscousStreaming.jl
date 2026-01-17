@@ -317,7 +317,7 @@ function SecondOrderMeanSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1in
   W₁ = D²(Ψ₁,K)
   bcresids1 = Ψs₂(1)
   if RF == InertialFrame
-    bcresids2 = real(dΨs₂(1) + 0.25im*W₁(1))
+    bcresids2 = real(dΨs₂(1) - 0.25im*W₁(1))
   elseif RF == CylinderFrame
     bcresids2 = real(dΨs₂(1))
   else 
@@ -426,7 +426,15 @@ function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=10
   # for verifying boundary conditions
   dΨ₂ = ComplexFunc(r -> derivative(Ψ₂,r))
   bcresid1 = Ψ₂(1)
-  bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+  # bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+
+  if RF == InertialFrame
+    bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+  elseif RF == CylinderFrame
+    bcresid2 = dΨ₂(1)
+  else 
+    error("Unknown reference frame type")
+  end
 
   println("BC residual on Ψ₂(1) = ",abs(bcresid1))
   println("BC residual on dΨ₂(1) = ",abs(bcresid2))
