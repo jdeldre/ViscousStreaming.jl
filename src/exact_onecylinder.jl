@@ -14,6 +14,7 @@ import CartesianGrids: curl
 
 export uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
 export InertialFrame, CylinderFrame
+export drift_velocity
 
 abstract type ReferenceFrame end
 struct InertialFrame <: ReferenceFrame end
@@ -508,3 +509,64 @@ vvelocity(x,y,t,s::StreamingAnalytical) =
 
 streamfunction(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*streamfunction(x,y,t,s.s1) + s.p.ϵ^2*(streamfunction(x,y,s.s2s)+streamfunction(x,y,t,s.s2))
+
+# Drift velocity functions
+
+Ψ11(r, p::StreamingParams, ::Type{InertialFrame})  = -p.C./r
+Ψ11r(r, p::StreamingParams, ::Type{InertialFrame}) =  p.C./r.^2
+
+Ψ11(r, p::StreamingParams, ::Type{CylinderFrame})  = -r .- p.C./r
+Ψ11r(r, p::StreamingParams, ::Type{CylinderFrame}) = -1 .+ p.C./r.^2
+
+function drift_velocity(x1, y1, p::StreamingParams, RF::Type{<:ReferenceFrame}; x2=x1, y2=y1)
+    γ  = p.γ
+    C  = p.C
+    H₀ = p.H₀
+
+    Ψ11  = r -> zero(r)
+    Ψ11r = r -> zero(r)
+
+    if RF == InertialFrame
+        Ψ11  = r -> -C/r
+        Ψ11r = r ->  C/r^2
+    elseif RF == CylinderFrame
+        Ψ11  = r -> -r - C/r
+        Ψ11r = r -> -1 + C/r^2
+    else
+        error("Unknown reference frame type")
+    end
+
+    Ψ12(r)   = 2*hankelh1(1, γ*r) / (γ*hankelh1(0, γ))
+    Ψ1(r)    = Ψ11(r) + Ψ12(r)
+
+    Ψ12r(r)  = (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+    Ψ1r(r)   = Ψ11r(r) + Ψ12r(r)
+
+    Ψ11rr(r) = -2C/r^3
+    Ψ12rr(r) = -γ/(2H₀) * (3*hankelh1(1, γ*r) - hankelh1(3, γ*r))
+    Ψ1rr(r)  = Ψ11rr(r) + Ψ12rr(r)
+
+    U_r1(r)    = Ψ1(r)/r
+    U_θ1(r)    = -Ψ1r(r)
+
+    dUr1_dr(r) = (Ψ1r(r)*r - Ψ1(r)) / r^2
+    dUθ1_dr(r) = -Ψ1rr(r)
+
+    vdv_r(r, θ) =
+        conj(U_r1(r)) * dUr1_dr(r) * cos(θ)^2 -
+        conj(U_θ1(r))/r * U_r1(r) * sin(θ)^2 -
+        conj(U_θ1(r)) * U_θ1(r)/r * sin(θ)^2
+
+    vdv_θ(r, θ) =
+        conj(U_r1(r)) * dUθ1_dr(r) * cos(θ)*sin(θ) +
+        conj(U_θ1(r))/r * U_θ1(r) * cos(θ)*sin(θ) +
+        conj(U_θ1(r)) * U_r1(r)/r * cos(θ)*sin(θ)
+
+    vdv_u(r, θ) = vdv_r(r, θ)*cos(θ) - vdv_θ(r, θ)*sin(θ)
+    vdv_v(r, θ) = vdv_r(r, θ)*sin(θ) + vdv_θ(r, θ)*cos(θ)
+
+    vdv_u_xy(x, y) = vdv_u(hypot(x, y), atan(y, x))
+    vdv_v_xy(x, y) = vdv_v(hypot(x, y), atan(y, x))
+
+    return (0.5 * vdv_u_xy.(x1, y1), 0.5 * vdv_v_xy.(x2, y2))
+end
