@@ -260,7 +260,7 @@ function uvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
-    return real.((s.Ur(r)*coseval^2-s.Uθ₁(r)*sineval^2)*exp.(-im*t))
+    return real.((s.Ur(r)*coseval^2-s.Uθ(r)*sineval^2)*exp.(-im*t))
 end
 function vvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
