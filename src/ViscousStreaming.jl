@@ -114,6 +114,8 @@ module ViscousStreaming
   # #include("averaging.jl")
   # #include("trajectories.jl")
 
+  # new source codes
+  include("numerical.jl")
 
 
 end # module
