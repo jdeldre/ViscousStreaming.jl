@@ -19,7 +19,11 @@ Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 RigidBodyTools = "befc5f09-81d5-499c-a4b2-d0464ba9f9c8"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 ViscousFlow = "103da179-b3e4-57c1-99a4-586354eb2c5a"
+
+[compat]
+UnPack = "1.0.2"
 
 [extras]
 JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"

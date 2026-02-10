@@ -2,6 +2,7 @@ module ViscousStreaming
 
   using Reexport
   using SpecialFunctions
+  using UnPack
 
   @reexport using ViscousFlow
   #@reexport using ImmersedLayers
