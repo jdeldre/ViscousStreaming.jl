@@ -570,3 +570,14 @@ function drift_velocity(x1, y1, p::StreamingParams, RF::Type{<:ReferenceFrame}; 
 
     return (0.5 * vdv_u_xy.(x1, y1), 0.5 * vdv_v_xy.(x2, y2))
 end
+
+function drift_streamfunction(x, y, p::StreamingParams)
+    γ  = p.γ
+    C  = p.C
+    H₀ = p.H₀
+
+    r = hypot.(x, y)
+    θ = atan.(y, x)
+
+    return 0.5 * imag((C./r.^2 - hankelh1.(2, γ*r)) .* conj(hankelh1.(0, γ*r) / H₀)) .* sin.(2θ)
+end
