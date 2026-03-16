@@ -581,3 +581,25 @@ function drift_streamfunction(x, y, p::StreamingParams)
 
     return 0.5 * imag((C./r.^2 - hankelh1.(2, γ*r)) .* conj(hankelh1.(0, γ*r) / H₀)) .* sin.(2θ)
 end
+
+# function drift_vorticty(x, y, p::StreamingParams)
+#     γ  = p.γ
+#     C  = p.C
+#     H₀ = p.H₀
+
+#     r = hypot.(x, y)
+#     θ = atan.(y, x)
+
+#     X(r) = hankelh1(0, γ*r) / H₀
+#     Z(r) = hankelh1(2, γ*r) / H₀
+#     Xr(r) = - γ * hankelh1(1, γ*r) / H₀
+#     Zr(r) = γ/2 * (hankelh1(1, γ*r) - hankelh1(3, γ*r)) / H₀
+#     Xrr(r) = -γ^2 / 2 * (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+#     Zrr(r) = -γ^2 / 4 * (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+
+#     sd(r) = 0.5 * (C / r^2 - Z(r)) * conj(X(r))
+#     sdr(r) = 0.5 * ((-2 * C ./ r.^3 - Zr(r)) .* conj(X(r)) + (C ./ r.^2 - Z(r)) .* conj(Xr(r)))
+#     sdr2(r) = 0.5 * ((6 * C ./ r.^4 - Zrr(r)) .* conj(X(r)) + 2 * (-2 * C ./ r.^3 - Zr(r)) .* conj(Xr(r)) + (C ./ r.^2 - Z(r)) .* conj(Xrr(r))) 
+
+#     return imag(sdr2(r) * sin(2θ) + 1/r * sdr(r) * sin(2θ) -4 / r^2 * sd(r) * sin(2θ))
+# end
