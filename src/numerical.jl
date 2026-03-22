@@ -45,9 +45,9 @@ function _unscaled_convective_derivative!(vdu::Edges{Primal},v::Edges{Primal},u:
     grid_interpolate!(vdu,vt3_cache)
 end
 
-@ilmproblem ViscousStreaming vector
+@ilmproblem ViscousStreamingInertial vector
 
-struct ViscousStreamingCache{SMT,SSMT,CMT,RCT,DVT,VNT,ST,VFT,FT, HT} <: AbstractExtraILMCache
+struct ViscousStreamingInertialCache{SMT,SSMT,CMT,RCT,DVT,VNT,ST,VFT,FT, HT} <: AbstractExtraILMCache
    S1 :: SMT
    S2 :: SMT
    Ss :: SSMT
@@ -63,7 +63,7 @@ struct ViscousStreamingCache{SMT,SSMT,CMT,RCT,DVT,VNT,ST,VFT,FT, HT} <: Abstract
    H :: HT # Helmholtz operator
 end
 
-function ImmersedLayers.prob_cache(prob::ViscousStreamingProblem,base_cache::BasicILMCache)
+function ImmersedLayers.prob_cache(prob::ViscousStreamingInertialProblem,base_cache::BasicILMCache)
     # Build Helmholtz operator with Re from phys_params
     Re = prob.phys_params["Re"]
     H = _get_helmholtz(1.0, Re, base_cache.g, true, GridScaling)
@@ -84,10 +84,10 @@ function ImmersedLayers.prob_cache(prob::ViscousStreamingProblem,base_cache::Bas
 
     Rc = RegularizationMatrix(base_cache,dvn,ϕ)
 
-    ViscousStreamingCache(S1,S2,Ss,C,Rc,dv,vb,vprime,dvn,sstar,vϕ,ϕ,H)
+    ViscousStreamingInertialCache(S1,S2,Ss,C,Rc,dv,vb,vprime,dvn,sstar,vϕ,ϕ,H)
 end
 
-function ImmersedLayers.solve(prob::ViscousStreamingProblem,sys::ILMSystem)
+function ImmersedLayers.solve(prob::ViscousStreamingInertialProblem,sys::ILMSystem)
     @unpack extra_cache, base_cache, bc, phys_params = sys
     @unpack nrm = base_cache
     @unpack S1, S2, Ss, C, Rc, dv, vb, vprime, sstar, dvn, vϕ, ϕ, H  = extra_cache
