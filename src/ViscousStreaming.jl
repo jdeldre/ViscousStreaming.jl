@@ -108,15 +108,15 @@ module ViscousStreaming
   params(s::T) where {T <: StreamingSolution} = s.p
 
   include("exact_onecylinder.jl")
-  # #include("solver.jl")
-  # #include("frequency_domain.jl")
-  # #include("inertialparticles.jl")
-  # #include("displacement.jl")
-  # #include("averaging.jl")
-  # #include("trajectories.jl")
+  #include("solver.jl")
+  #include("frequency_domain.jl")
+  # include("inertialparticles.jl")
+  #include("displacement.jl")
+  #include("averaging.jl")
+  #include("trajectories.jl")
 
   # new source codes
   include("numerical.jl")
-
+  include("particle_tracking.jl")
 
 end # module
