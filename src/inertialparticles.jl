@@ -1,7 +1,9 @@
 # Routines associated with computing the inertial particle velocity field
 # from the fluid velocity field
 
-export InertialParameters,inertial_velocity, acceleration_force, saffman, ddt
+import ImmersedLayers: laplacian!
+
+export InertialParameters,inertial_velocity, saffman, _unscaled_convective_derivative!
 
 """
     InertialParameters
@@ -28,6 +30,10 @@ InertialParameters(;beta,tau,epsilon,Re) = InertialParameters(beta,tau,epsilon,R
 # restrictive one here
 @inline product!(out::Nodes{C,NX,NY,F}, p::Nodes{C,NX,NY,F},
                   q::Nodes{C,NX,NY,F}) where {C,NX,NY,F} = (out .= p.*q)
+
+@inline product!(out::EdgeGradient{C,NX,NY,F},
+                 p::EdgeGradient{C,NX,NY,F},
+                 q::EdgeGradient{C,NX,NY,F}) where {C,NX,NY,F} = (out .= p .* q)
 
 #=
 """
@@ -218,15 +224,31 @@ function acceleration_force(u::T,dudt::T,g::PhysicalGrid,p::InertialParameters) 
 end
 
 """
-    acceleration_force(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
+    acc1(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
 
-Calculate the acceleration force from the given velocity data `u1` as complex amplitude
+Calculate the first-order acceleration force from the given velocity data `u1` as complex amplitude
 """
-function acceleration_force(u1::T,cache::BasicILMCache,p::InertialParameters) where {T <: Edges}
-    lu1 = zeros_grid(cache)
-    laplacian!(lu1, u1, cache)
+function acc1(u1::Edges{Primal,NX,NY,ComplexF64},cache1::BasicILMCache,p::InertialParameters) where {NX,NY}
+    lu1 = zeros_grid(cache1)
+    laplacian!(lu1, u1, cache1)
     a1 = im * (p.β-1) * u1 + 0.5 * p.β / p.Re * lu1;
     return a1
+end
+
+"""
+    acc2(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
+
+Calculate the second-order acceleration force from the given mean velocity data `u2`
+"""
+function acc2(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,NX,NY,Float64},cache1::BasicILMCache, cache2::BasicILMCache, p::InertialParameters) where {NX,NY}
+    udu = zeros_grid(cache1);
+    cdcache = ConvectiveDerivativeCache(cache1);
+    _unscaled_convective_derivative!(udu, u1, conj(u1), cdcache)
+    ImmersedLayers._scale_derivative!(udu, cache1)
+    lu2 = zeros_grid(cache2)
+    laplacian!(lu2, u2, cache2)
+    a2 = 0.5 * (p.β-1) * real(udu) + 0.5 * p.β / p.Re * lu2;
+    return a2
 end
 
 """
@@ -344,3 +366,12 @@ end
 #=
 Frequency domain routines
 =#
+
+function inertial_velocity(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,NX,NY,Float64}, ω1::Nodes{Dual,NX,NY,ComplexF64}, cache1::BasicILMCache, cache2::BasicILMCache, p::InertialParameters) where {NX,NY}
+    a1 = acc1(u1,cache1,p)
+    v1 = u1 + p.τ*a1
+    a2 = acc2(u1, u2, cache1, cache2, p)
+    Ls0, Ls2 = saffman(a1,ω1)
+    v2 = u2 + p.τ*a2 - sqrt(p.β*p.τ^3/p.ϵ)*real(Ls0)
+    return v1, v2
+end
