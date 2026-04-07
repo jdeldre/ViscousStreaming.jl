@@ -110,13 +110,16 @@ module ViscousStreaming
   include("exact_onecylinder.jl")
   #include("solver.jl")
   #include("frequency_domain.jl")
-  # include("inertialparticles.jl")
+  
   #include("displacement.jl")
   #include("averaging.jl")
   #include("trajectories.jl")
 
   # new source codes
   include("numerical.jl")
-  include("particle_tracking.jl")
+  # include("particle_tracking.jl")
+
+  # placed here to use functions defined in numerical.jl
+  include("inertialparticles.jl")
 
 end # module
