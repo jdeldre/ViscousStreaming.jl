@@ -29,7 +29,7 @@ InertialParameters(;beta,tau,epsilon,Re) = InertialParameters(beta,tau,epsilon,R
 @inline product!(out::Nodes{C,NX,NY,F}, p::Nodes{C,NX,NY,F},
                   q::Nodes{C,NX,NY,F}) where {C,NX,NY,F} = (out .= p.*q)
 
-
+#=
 """
     inertial_velocity(ux::History{XEdges},uy::History{YEdges},
         duxdt::History{XEdges},duydt::History{YEdges},w::History{Nodes},
@@ -41,6 +41,7 @@ vorticity (unscaled by grid spacing) is given in `w`. The physical grid data is 
 the time step size corresponding to the histories is in `Δt`, and the physical parameters in
 `p`. The result is returned as a tuple of `History{XEdge}` and `History{YEdge}`.
 """
+
 function inertial_velocity(ux::History{S,H},uy::History{T,H},
         duxdt::History{S,H},duydt::History{T,H},
         w::History{R,H},
@@ -122,7 +123,7 @@ function inertial_velocity(ux::History{S,H},uy::History{T,H},
     end
     return vx, vy
 end
-
+=#
 
 """
     inertial_velocity(u::Edges{Primal},dudt::Edges{Primal},ω::Nodes{Dual},g::PhysicalGrid,p::InertialParameters)
@@ -158,6 +159,7 @@ function inertial_velocity(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParam
     return u + p.τ*a
 end
 
+#=
 """
 """
 function inertial_velocity(s::StreamingComputational{FluidFlow},p::InertialParameters)
@@ -197,11 +199,8 @@ function inertial_velocity(s::StreamingComputational{FluidFlow},p::InertialParam
 
 
   return StreamingComputational{ParticleFlow}(s.p,s.g,soln1,meansoln2,sdsoln,nothing)
-
-
-
-
 end
+=#
 
 """
     acceleration_force(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
@@ -216,6 +215,18 @@ depending on what is passed. The grid data in `g` is used for the grid spacing.
 """
 function acceleration_force(u::T,dudt::T,g::PhysicalGrid,p::InertialParameters) where {T <: Edges}
     return (p.β-1)*dudt + 0.5p.β/p.Re*laplacian(u)/cellsize(g)^2
+end
+
+"""
+    acceleration_force(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
+
+Calculate the acceleration force from the given velocity data `u1` as complex amplitude
+"""
+function acceleration_force(u1::T,cache::BasicILMCache,p::InertialParameters) where {T <: Edges}
+    lu1 = zeros_grid(cache)
+    laplacian!(lu1, u1, cache)
+    a1 = im * (p.β-1) * u1 + 0.5 * p.β / p.Re * lu1;
+    return a1
 end
 
 """
@@ -246,8 +257,6 @@ function saffman(u::Edges{Primal},ω::Nodes{Dual})
 
     return Ls
 end
-
-
 
 """
     saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{DualNX,NY,ComplexF64})
@@ -316,6 +325,7 @@ _coefficient(n) = 2^(1/2)*(ellipk(1/2)/π)*gamma(n/2+1/4)^2/gamma(1/4)^2/gamma(n
 Time derivatives
 =#
 
+#=
 ddt(u::History{T,PeriodicHistory}) where {T} = 0.5*(diff(u) + diff(circshift(u,1)))
 
 ddt(u,Δt::Real) = ddt(u)/Δt
@@ -329,6 +339,7 @@ function ddt(s::AsymptoticComputational{SecondOrder,F,NX,NY}) where {F,NX,NY}
     return AsymptoticComputational{SecondOrder,F,NX,NY}(s.Re,s.ϵ,s.Ω,s.g,
                       2im*s.Ω*s.W,2im*s.Ω*s.Ψ,2im*s.Ω*s.U)
 end
+=#
 
 #=
 Frequency domain routines
