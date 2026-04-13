@@ -1,9 +1,11 @@
 # Routines associated with computing the inertial particle velocity field
 # from the fluid velocity field
 
+using Interpolations
+
 import ImmersedLayers: laplacian!
 
-export InertialParameters,inertial_velocity, saffman, _unscaled_convective_derivative!, acc1, acc2
+export InertialParameters,inertial_velocity, saffman, _unscaled_convective_derivative!, ParticleFlow
 
 """
     InertialParameters
@@ -287,6 +289,19 @@ end
 =#
 
 """
+    ParticleFlowField(v1, v2, vL, vL_u_interp, vL_v_interp)
+
+A struct to hold the inertial particle velocity field information, including the first and second order inertial velocities (v1, v2), the Lagrangian mean velocity (vL), and the interpolatable fields for the Lagrangian mean velocity components (vL_u_interp, vL_v_interp).
+"""
+struct ParticleFlowField
+    v1
+    v2
+    v_L
+    v_L_u_interp
+    v_L_v_interp
+end
+
+"""
     saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{DualNX,NY,ComplexF64})
 
 Computes the Saffman lift operator ``\\mathcal{L}_s``, using velocity field `u` (in primal edge data)
@@ -409,7 +424,17 @@ function inertial_velocity(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,
     a2 = acc2(u1, u2, cache1, cache2, p)
     Ls0, Ls2 = saffman(a1,ω1)
     v2 = u2 + p.τ*a2 - sqrt(p.β*p.τ^3/p.ϵ)*real(Ls0)
-    return v1, v2
+
+    vdv = zeros_grid(cache1)
+    cdcache = ConvectiveDerivativeCache(cache1);
+    _unscaled_convective_derivative!(vdv, v1, conj(v1), cdcache)
+    ImmersedLayers._scale_derivative!(vdv, cache1)
+    v_drift =  1/2 * imag(vdv); 
+
+    v_L = v2 + v_drift;
+    v_L_u_interp = interpolatable_field(v_L.u, cache1.g)
+    v_L_v_interp = interpolatable_field(v_L.v, cache1.g)
+    return ParticleFlowField(v1, v2, v_L, v_L_u_interp, v_L_v_interp)
 end
 
 function inertial_velocity(flowfield::FlowField, p::InertialParameters)
