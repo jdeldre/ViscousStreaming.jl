@@ -7,7 +7,7 @@ module ViscousStreaming
   @reexport using ViscousFlow
   #@reexport using ImmersedLayers
 
-  export params, StreamingParams, StreamingAnalytical, StreamingComputational
+  export params, StreamingParams, StreamingAnalytical, StreamingComputational, FlowField
 
   abstract type OrderType end
   abstract type FirstOrder <: OrderType end
@@ -17,6 +17,21 @@ module ViscousStreaming
   abstract type FlowType end
   abstract type FluidFlow <: FlowType end
   abstract type ParticleFlow <: FlowType end
+
+  """
+    FlowField(u1, u2, s1, s2, ω1, g, body)
+
+  A struct to hold the flow field information, including the first and second order velocity fields (u1, u2), the first and second order streaming fields (s1, s2), the first order vorticity field (ω1), the physical grid (g), and the body geometry (body).
+  """
+  struct FlowField
+    u1
+    u2
+    s1
+    s2
+    ω1
+    g
+    body
+  end
 
   """
       StreamingParams(ϵ,Re)
