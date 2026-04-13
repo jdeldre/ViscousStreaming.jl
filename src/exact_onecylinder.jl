@@ -9,10 +9,10 @@ using DiffRules
 
 import ForwardDiff:value,partials,derivative,extract_derivative
 
-import ViscousFlow: vorticity,streamfunction
+# import ViscousFlow: vorticity,streamfunction
 import CartesianGrids: curl
 
-export uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
+export uvelocity, vvelocity, vorticity, streamfunction, params, firstorder, secondordermean, secondorder
 export InertialFrame, CylinderFrame
 export drift_velocity
 
