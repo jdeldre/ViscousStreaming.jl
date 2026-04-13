@@ -131,6 +131,7 @@ function inertial_velocity(ux::History{S,H},uy::History{T,H},
 end
 =#
 
+#=
 """
     inertial_velocity(u::Edges{Primal},dudt::Edges{Primal},ω::Nodes{Dual},g::PhysicalGrid,p::InertialParameters)
 
@@ -164,6 +165,7 @@ function inertial_velocity(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParam
     a = acceleration_force(u,dudt,g,p)
     return u + p.τ*a
 end
+=#
 
 #=
 """
@@ -208,6 +210,7 @@ function inertial_velocity(s::StreamingComputational{FluidFlow},p::InertialParam
 end
 =#
 
+#=
 """
     acceleration_force(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
 
@@ -222,6 +225,7 @@ depending on what is passed. The grid data in `g` is used for the grid spacing.
 function acceleration_force(u::T,dudt::T,g::PhysicalGrid,p::InertialParameters) where {T <: Edges}
     return (p.β-1)*dudt + 0.5p.β/p.Re*laplacian(u)/cellsize(g)^2
 end
+=#
 
 """
     acc1(u::Edges,dudt::Edges,g::PhysicalGrid,p::InertialParameters)
@@ -251,6 +255,7 @@ function acc2(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,NX,NY,Float64
     return a2
 end
 
+#=
 """
     saffman(u::Edges{Primal},ω::Nodes{Dual})
 
@@ -279,6 +284,7 @@ function saffman(u::Edges{Primal},ω::Nodes{Dual})
 
     return Ls
 end
+=#
 
 """
     saffman(u::Edges{Primal,NX,NY,ComplexF64},ω::Nodes{DualNX,NY,ComplexF64})
@@ -367,6 +373,32 @@ end
 Frequency domain routines
 =#
 
+"""
+    inertial_velocity(u1, u2, ω1, cache1, cache2, p)
+    inertial_velocity(flowfield, p)
+
+Compute the first- and second-order contributions to the inertial particle
+velocity field in the frequency domain.
+
+# Methods
+- `inertial_velocity(u1, u2, ω1, cache1, cache2, p)`:
+  Core implementation. Uses provided velocity fields, vorticity, and ILM caches.
+
+- `inertial_velocity(flowfield, p)`:
+  Convenience wrapper. Extracts `u1`, `u2`, `ω1` and constructs caches from
+  `flowfield`, then calls the core method.
+
+# Arguments
+- `u1`: First-order velocity field (complex)
+- `u2`: Second-order mean velocity field (real)
+- `ω1`: First-order vorticity field (complex)
+- `cache1`, `cache2`: ILM caches for acceleration computation
+- `flowfield`: Struct containing `u1`, `u2`, `ω1`, grid, and body
+- `p`: Inertial parameters
+
+# Returns
+- `(v1, v2)`: First- and second-order inertial particle velocities
+"""
 function inertial_velocity(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,NX,NY,Float64}, ω1::Nodes{Dual,NX,NY,ComplexF64}, cache1::BasicILMCache, cache2::BasicILMCache, p::InertialParameters) where {NX,NY}
     a1 = acc1(u1,cache1,p)
     v1 = u1 + p.τ*a1
@@ -374,4 +406,22 @@ function inertial_velocity(u1::Edges{Primal,NX,NY,ComplexF64}, u2::Edges{Primal,
     Ls0, Ls2 = saffman(a1,ω1)
     v2 = u2 + p.τ*a2 - sqrt(p.β*p.τ^3/p.ϵ)*real(Ls0)
     return v1, v2
+end
+
+function inertial_velocity(flowfield::FlowField, p::InertialParameters)
+    # set up the cache 
+    g = flowfield.g
+    body = flowfield.body
+    cache1 = SurfaceVectorCache(body, g, dtype=ComplexF64);
+    cache2 = SurfaceVectorCache(body, g, dtype=Float64);
+
+    # extract flow states
+    u1 = zeros_grid(cache1);
+    u2 = zeros_grid(cache2);
+    ω1 = zeros_gridcurl(cache1)
+    u1 .= flowfield.u1
+    u2 .= flowfield.u2
+    ω1 .= flowfield.ω1
+
+    return inertial_velocity(u1, u2, ω1, cache1, cache2, p)
 end
