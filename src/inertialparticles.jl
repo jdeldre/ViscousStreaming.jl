@@ -39,6 +39,12 @@ InertialParameters(;beta,tau,epsilon,Re) = InertialParameters(beta,tau,epsilon,R
 @inline product!(out::EdgeGradient{C,NX,NY,F},
                  p::EdgeGradient{C,NX,NY,F},
                  q::EdgeGradient{C,NX,NY,F}) where {C,NX,NY,F} = (out .= p .* q)
+            
+function product!(out::VectorData, a::VectorData, b::ScalarData)
+    @. out.u = a.u * b
+    @. out.v = a.v * b
+    return out
+end
 
 #=
 """
