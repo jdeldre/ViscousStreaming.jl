@@ -254,7 +254,8 @@ end
 
 function vorticity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
   r = sqrt(x^2+y^2)
-  return real(-s.W(r)*y/r*exp.(-im*t))
+  # return real(-s.W(r)*y/r*exp.(-im*t))
+  return -s.W(r)*y/r*exp.(-im*t)
 end
 function uvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
