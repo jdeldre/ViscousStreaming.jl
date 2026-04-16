@@ -220,13 +220,17 @@ function FirstOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame})
       error("Unknown reference frame type")
     end
     
+    W1 = ComplexFunc(r -> 2*p.γ*Y(r))
     W₁ = D²(Ψ₁,K)  # note that this is actually the negative of the vorticity. We will account for this when we evaluate it.
     Ur₁, Uθ₁ = curl(Ψ₁,K)
 
     # for verifying the solution
+    wresid = ComplexFunc(r -> W1(r) + W₁(r))
+    println("Maximum residual on W1 = ",maximum(abs.(wresid.(range(1,5,length=10)))))
+
     LW₁ = D²(W₁,K);
     resid1 = ComplexFunc(r -> LW₁(r)+im*p.Re*W₁(r))
-    println("Maximum residual on W₁ = ",maximum(abs.(resid1.(range(1,5,length=10)))))
+    println("Maximum residual on LW₁ = ",maximum(abs.(resid1.(range(1,5,length=10)))))
 
     # for verifying boundary conditions
     dΨ₁ = ComplexFunc(r -> derivative(Ψ₁,r))
@@ -243,7 +247,7 @@ function FirstOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame})
     println("BC residual on Ψ₁(1) = ",abs(bcresid1))
     println("BC residual on dΨ₁(1) = ",abs(bcresid2))
 
-    return AsymptoticAnalytical{FirstOrder}(K,p,Ψ₁,W₁,Ur₁,Uθ₁)
+    return AsymptoticAnalytical{FirstOrder}(K,p,Ψ₁,W1,Ur₁,Uθ₁)
 
 end
 
@@ -275,27 +279,27 @@ end
 
 # first order complex amplitude functions
 function vorticity(x,y,s::AsymptoticAnalytical{FirstOrder})
-  r = sqrt(x.^2+y.^2)
-  return conj.(-s.W(r)).*y./r
+  r = sqrt.(x.^2+y.^2)
+  return conj.(-s.W.(r)).*y./r
 end
 
 function uvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    return conj.(s.Ur(r)*coseval^2-s.Uθ(r)*sineval^2)
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    return conj.(s.Ur.(r).*coseval.^2-s.Uθ.(r).*sineval.^2)
 end
 
 function vvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    return conj.((s.Ur(r)+s.Uθ(r))*coseval*sineval)
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    return conj.((s.Ur.(r)+s.Uθ.(r)).*coseval.*sineval)
 end
 
 function streamfunction(x,y,s::AsymptoticAnalytical{FirstOrder})
-    r = sqrt(x^2+y^2)
-    return conj.(s.Ψ(r)*y/r)
+    r = sqrt.(x.^2+y.^2)
+    return conj.(s.Ψ.(r).*y./r)
 end
 
 # second order mean
@@ -362,42 +366,42 @@ function Base.show(io::IO, s::AsymptoticAnalytical{SecondOrderMean})
 end
 
 function vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    sin2eval = 2*x*y/r^2
-    return real(-s.W(r))*sin2eval
+  r = sqrt.(x.^2+y.^2)
+    sin2eval = 2 .*x.*y./r.^2
+    return real(-s.W.(r)).*sin2eval
 end
 function uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    cos2eval = coseval^2-sineval^2
-    sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r))*cos2eval
-    uθ = real.(s.Uθ(r))*sin2eval
-    return ur*coseval .- uθ*sineval
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    cos2eval = coseval.^2-sineval.^2
+    sin2eval = 2 .*coseval.*sineval
+    ur = real.(s.Ur.(r)).*cos2eval
+    uθ = real.(s.Uθ.(r)).*sin2eval
+    return ur.*coseval .- uθ.*sineval
 end
 function vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    cos2eval = coseval^2-sineval^2
-    sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r))*cos2eval
-    uθ = real.(s.Uθ(r))*sin2eval
-    return ur*sineval .+ uθ*coseval
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    cos2eval = coseval.^2-sineval.^2
+    sin2eval = 2 .*coseval.*sineval
+    ur = real.(s.Ur.(r)).*cos2eval
+    uθ = real.(s.Uθ.(r)).*sin2eval
+    return ur.*sineval .+ uθ.*coseval
 end
 function streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    sin2eval = 2*coseval*sineval
-    return real(s.Ψ(r))*sin2eval
+    r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    sin2eval = 2 .*coseval.*sineval
+    return real.(s.Ψ.(r)).*sin2eval
 end
 
-vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
 
 
 function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=100000,n120=400000)
@@ -484,26 +488,26 @@ function uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur.(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ.(r)*exp.(-2im*t))*sin2eval
     return ur*coseval .- uθ*sineval
 end
 function vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
+    coseval = x./r
+    sineval = y./r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur.(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ.(r)*exp.(-2im*t))*sin2eval
     return ur*sineval .+ uθ*coseval
 end
 function streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
+    coseval = x./r
+    sineval = y./r
     sin2eval = 2*coseval*sineval
-    return real(s.Ψ(r)*exp.(-2im*t))*sin2eval
+    return real.(s.Ψ.(r)*exp.(-2im*t))*sin2eval
 end
 
 ### all together
