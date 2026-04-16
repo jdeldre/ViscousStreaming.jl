@@ -254,8 +254,7 @@ end
 
 function vorticity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
   r = sqrt(x^2+y^2)
-  # return real(-s.W(r)*y/r*exp.(-im*t))
-  return -s.W(r)*y/r*exp.(-im*t)
+  return real(-s.W(r)*y/r*exp.(-im*t))
 end
 function uvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
@@ -272,6 +271,31 @@ end
 function streamfunction(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
     return real(s.Ψ(r)*y/r*exp.(-im*t))
+end
+
+# first order complex amplitude functions
+function vorticity(x,y,s::AsymptoticAnalytical{FirstOrder})
+  r = sqrt(x^2+y^2)
+  return conj.(-s.W(r))*y/r
+end
+
+function uvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
+    r = sqrt(x^2+y^2)
+    coseval = x/r
+    sineval = y/r
+    return conj.(s.Ur(r)*coseval^2-s.Uθ(r)*sineval^2)
+end
+
+function vvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
+    r = sqrt(x^2+y^2)
+    coseval = x/r
+    sineval = y/r
+    return conj.((s.Ur(r)+s.Uθ(r))*coseval*sineval)
+end
+
+function streamfunction(x,y,s::AsymptoticAnalytical{FirstOrder})
+    r = sqrt(x^2+y^2)
+    return conj.(s.Ψ(r)*y/r)
 end
 
 # second order mean
