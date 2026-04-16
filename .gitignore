@@ -1,6 +1,8 @@
 cache
-# *.ipynb
+*.ipynb
+.DS_Store
 Manifest.toml
+notebooks/
 notebooks/*.jld
 
 # figures
