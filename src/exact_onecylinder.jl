@@ -275,8 +275,8 @@ end
 
 # first order complex amplitude functions
 function vorticity(x,y,s::AsymptoticAnalytical{FirstOrder})
-  r = sqrt(x^2+y^2)
-  return conj.(-s.W(r))*y/r
+  r = sqrt(x.^2+y.^2)
+  return conj.(-s.W(r)).*y./r
 end
 
 function uvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
