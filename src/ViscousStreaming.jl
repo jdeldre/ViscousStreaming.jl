@@ -132,7 +132,6 @@ module ViscousStreaming
 
   # new source codes
   include("numerical.jl")
-  # include("particle_tracking.jl")
 
   # placed here to use functions defined in numerical.jl
   include("inertialparticles.jl")
