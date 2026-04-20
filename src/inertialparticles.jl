@@ -498,7 +498,7 @@ function inertial_velocity(flowfield::FlowField, p::InertialParameters)
     u2 = zeros_grid(cache2);
     ω1 = zeros_gridcurl(cache1)
     u1 .= flowfield.u1
-    u2 .= flowfield.u2
+    u2 .= real(flowfield.u2)
     ω1 .= flowfield.ω1
 
     return inertial_velocity(u1, u2, ω1, cache1, cache2, p)
