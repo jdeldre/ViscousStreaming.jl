@@ -9,12 +9,16 @@ using DiffRules
 
 import ForwardDiff:value,partials,derivative,extract_derivative
 
-import ViscousFlow: vorticity,streamfunction
+# import ViscousFlow: vorticity,streamfunction
 import CartesianGrids: curl
 
-export uvelocity,vvelocity, params, firstorder, secondordermean, secondorder
+export uvelocity, vvelocity, vorticity, streamfunction, params, firstorder, secondordermean, secondorder
+export InertialFrame, CylinderFrame
+export drift_velocity
 
-
+abstract type ReferenceFrame end
+struct InertialFrame <: ReferenceFrame end
+struct CylinderFrame <: ReferenceFrame end
 
 (f::ComplexFunc)(x) = f.fcn(x)
 
@@ -203,29 +207,47 @@ end
 
 #### Construct the first and second order solutions
 
-function FirstOrderSoln(p::StreamingParams)
+function FirstOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame})
 
     @create_dual(Y,1,p.γ,p.H₀,hankelh1)
 
     K = 1
-    Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
+    if RF == InertialFrame
+      Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
+    elseif RF == CylinderFrame
+      Ψ₁ = ComplexFunc(r -> -r - p.C/r + 2Y(r)/p.γ)
+    else 
+      error("Unknown reference frame type")
+    end
+    
+    W1 = ComplexFunc(r -> 2*p.γ*Y(r))
     W₁ = D²(Ψ₁,K)  # note that this is actually the negative of the vorticity. We will account for this when we evaluate it.
     Ur₁, Uθ₁ = curl(Ψ₁,K)
 
     # for verifying the solution
+    wresid = ComplexFunc(r -> W1(r) + W₁(r))
+    println("Maximum residual on W1 = ",maximum(abs.(wresid.(range(1,5,length=10)))))
+
     LW₁ = D²(W₁,K);
     resid1 = ComplexFunc(r -> LW₁(r)+im*p.Re*W₁(r))
-    println("Maximum residual on W₁ = ",maximum(abs.(resid1.(range(1,5,length=10)))))
+    println("Maximum residual on LW₁ = ",maximum(abs.(resid1.(range(1,5,length=10)))))
 
     # for verifying boundary conditions
     dΨ₁ = ComplexFunc(r -> derivative(Ψ₁,r))
-    bcresid1 = Ψ₁(1) - 1
-    bcresid2 = dΨ₁(1) - 1
+    if RF == InertialFrame
+      bcresid1 = Ψ₁(1) - 1
+      bcresid2 = dΨ₁(1) - 1
+    elseif RF == CylinderFrame
+      bcresid1 = Ψ₁(1)
+      bcresid2 = dΨ₁(1)
+    else 
+      error("Unknown reference frame type")
+    end
 
     println("BC residual on Ψ₁(1) = ",abs(bcresid1))
     println("BC residual on dΨ₁(1) = ",abs(bcresid2))
 
-    return AsymptoticAnalytical{FirstOrder}(K,p,Ψ₁,W₁,Ur₁,Uθ₁)
+    return AsymptoticAnalytical{FirstOrder}(K,p,Ψ₁,W1,Ur₁,Uθ₁)
 
 end
 
@@ -242,7 +264,7 @@ function uvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
     coseval = x/r
     sineval = y/r
-    return real.((s.Ur(r)*coseval^2-s.Uθ₁(r)*sineval^2)*exp.(-im*t))
+    return real.((s.Ur(r)*coseval^2-s.Uθ(r)*sineval^2)*exp.(-im*t))
 end
 function vvelocity(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     r = sqrt(x^2+y^2)
@@ -255,9 +277,34 @@ function streamfunction(x,y,t,s::AsymptoticAnalytical{FirstOrder})
     return real(s.Ψ(r)*y/r*exp.(-im*t))
 end
 
+# first order complex amplitude functions
+function vorticity(x,y,s::AsymptoticAnalytical{FirstOrder})
+  r = sqrt.(x.^2+y.^2)
+  return conj.(-s.W.(r)).*y./r
+end
+
+function uvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    return conj.(s.Ur.(r).*coseval.^2-s.Uθ.(r).*sineval.^2)
+end
+
+function vvelocity(x,y,s::AsymptoticAnalytical{FirstOrder})
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    return conj.((s.Ur.(r)+s.Uθ.(r)).*coseval.*sineval)
+end
+
+function streamfunction(x,y,s::AsymptoticAnalytical{FirstOrder})
+    r = sqrt.(x.^2+y.^2)
+    return conj.(s.Ψ.(r).*y./r)
+end
+
 # second order mean
 
-function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderMeanSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -266,16 +313,26 @@ function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
 
   K = 2
   fakefact = 1
-  #f₀ = ComplexFunc(r -> -0.5*p.γ²*p.Re*(0.5*(p.C*conj(X(r))-conj(p.C)*X(r))/r^2 + X(r)*conj(Z(r)) - conj(X(r))*Z(r)))
-  f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
-
-  f̃₀ = ComplexFunc(r -> f₀(r) - 0.5*p.γ²*p.Re*(-0.5*conj(Z(r))+0.5*Z(r)))
+  if RF == InertialFrame
+    f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r))))
+  elseif RF == CylinderFrame
+    f₀ = ComplexFunc(r -> -p.γ²*p.Re*(0.5*p.C*conj(X(r))/r^2 + X(r)*conj(Z(r)) - 0.5*conj(Z(r))))
+  else 
+    error("Unknown reference frame type")
+  end
   I⁻¹ = ComplexIntegral(r->f₀(r)/r,1,Inf,length=n1inf)
   I¹ = ComplexIntegral(r->f₀(r)*r,1,Inf,length=n1inf)
   I³ = ComplexIntegral(r->f₀(r)*r^3,1,20,length=n120)
   I⁵ = ComplexIntegral(r->f₀(r)*r^5,1,20,length=n120)
-  Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 - fakefact*0.25im*p.γ*Y(1) +
+  if RF == InertialFrame
+    Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 - fakefact*0.25im*p.γ*Y(1) +
   1/r^2*(-I⁵(r)/48-I⁻¹(1)/24+I¹(1)/16 + fakefact*0.25im*p.γ*Y(1)))
+  elseif RF == CylinderFrame
+    Ψs₂ = ComplexFunc(r -> -r^4/48*I⁻¹(r) + r^2/16*I¹(r) + I³(r)/16 + I⁻¹(1)/16 - I¹(1)/8 +
+  1/r^2*(-I⁵(r)/48-I⁻¹(1)/24+I¹(1)/16))
+  else 
+    error("Unknown reference frame type")
+  end
   Ws₂ = D²(Ψs₂,K)
   Usr₂, Usθ₂ = curl(Ψs₂,K)
 
@@ -289,7 +346,13 @@ function SecondOrderMeanSoln(p::StreamingParams;n1inf=100000,n120=400000)
   Ψ₁ = ComplexFunc(r -> -p.C/r + 2Y(r)/p.γ)
   W₁ = D²(Ψ₁,K)
   bcresids1 = Ψs₂(1)
-  bcresids2 = real(dΨs₂(1) - 0.25im*W₁(1))
+  if RF == InertialFrame
+    bcresids2 = real(dΨs₂(1) - 0.25im*W₁(1))
+  elseif RF == CylinderFrame
+    bcresids2 = real(dΨs₂(1))
+  else 
+    error("Unknown reference frame type")
+  end
 
   println("BC residual on Ψs₂(1) = ",abs(bcresids1))
   println("BC residual on dΨs₂(1) = ",abs(bcresids2))
@@ -303,45 +366,45 @@ function Base.show(io::IO, s::AsymptoticAnalytical{SecondOrderMean})
 end
 
 function vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    sin2eval = 2*x*y/r^2
-    return real(-s.W(r))*sin2eval
+  r = sqrt.(x.^2+y.^2)
+    sin2eval = 2 .*x.*y./r.^2
+    return real(-s.W.(r)).*sin2eval
 end
 function uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    cos2eval = coseval^2-sineval^2
-    sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r))*cos2eval
-    uθ = real.(s.Uθ(r))*sin2eval
-    return ur*coseval .- uθ*sineval
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    cos2eval = coseval.^2-sineval.^2
+    sin2eval = 2 .*coseval.*sineval
+    ur = real.(s.Ur.(r)).*cos2eval
+    uθ = real.(s.Uθ.(r)).*sin2eval
+    return ur.*coseval .- uθ.*sineval
 end
 function vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    cos2eval = coseval^2-sineval^2
-    sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r))*cos2eval
-    uθ = real.(s.Uθ(r))*sin2eval
-    return ur*sineval .+ uθ*coseval
+  r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    cos2eval = coseval.^2-sineval.^2
+    sin2eval = 2 .*coseval.*sineval
+    ur = real.(s.Ur.(r)).*cos2eval
+    uθ = real.(s.Uθ.(r)).*sin2eval
+    return ur.*sineval .+ uθ.*coseval
 end
 function streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-    r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
-    sin2eval = 2*coseval*sineval
-    return real(s.Ψ(r))*sin2eval
+    r = sqrt.(x.^2+y.^2)
+    coseval = x./r
+    sineval = y./r
+    sin2eval = 2 .*coseval.*sineval
+    return real.(s.Ψ.(r)).*sin2eval
 end
 
-vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
-streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# vorticity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vorticity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = uvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = vvelocity(x,y,s::AsymptoticAnalytical{SecondOrderMean})
+# streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrderMean}) = streamfunction(x,y,s::AsymptoticAnalytical{SecondOrderMean})
 
 
-function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
+function SecondOrderSoln(p::StreamingParams, RF::Type{<:ReferenceFrame};n1inf=100000,n120=400000)
 
   @create_dual(X,0,p.γ,p.H₀,hankelh1)
   @create_dual(Y,1,p.γ,p.H₀,hankelh1)
@@ -354,10 +417,13 @@ function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
 
   K = 2
   fakefact = 1
-  g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
-
-  g̃₀ = ComplexFunc(r -> g₀(r) - 0.5*p.γ²*p.Re*Z(r))
-
+  if RF == InertialFrame
+    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2)
+  elseif RF == CylinderFrame
+    g₀ = ComplexFunc(r -> 0.5*p.γ²*p.Re*p.C*X(r)/r^2 - 0.5 * p.Re * p.γ² * Z(r))
+  else 
+    error("Unknown reference frame type")
+  end
 
   Kλ = ComplexFunc(r -> H11(1)*H22(r) - H12(1)*H21(r))
 
@@ -370,21 +436,35 @@ function SecondOrderSoln(p::StreamingParams;n1inf=100000,n120=400000)
   Ig² = ComplexFunc(r -> 0.25im*π/(p.λ²*H11(1))*IH21gr(r)*Kλ(r))
   Ig³ = ComplexFunc(r -> 1/(p.λ²*p.λ*H11(1))*((H21(r)-H21(1)/r^2)*Igr⁻¹(1)+IH21gr(1)/r^2))
   Ig⁴ = ComplexFunc(r -> -0.25/p.λ²*(Igr⁻¹(r)*r^2-Igr⁻¹(1)/r^2+Igr³(r)/r^2))
-  Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r) + fakefact*0.5im/sqrt(2)*Y(1)/H11(1)*(H21(r)-H21(1)/r^2))
-
-  Ψ̃₂ = ComplexFunc(r -> Ψ₂(r)+ 0.5im*(-p.C/r^2 + Z(r))) # cylinder-fixed reference frame... not used
+  if RF == InertialFrame
+    Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r) + fakefact*0.5im/sqrt(2)*Y(1)/H11(1)*(H21(r)-H21(1)/r^2))
+  elseif RF == CylinderFrame
+    # Ψ₂ = ComplexFunc(r -> Ψ₂(r)+ 0.5im*(-p.C/r^2 + Z(r))) # cylinder-fixed reference frame... not used
+    Ψ₂ = ComplexFunc(r -> Ig¹(r) + Ig²(r) + Ig³(r) + Ig⁴(r)) 
+  else 
+    error("Unknown reference frame type")
+  end
   W₂ = D²(Ψ₂,K)
   Ur₂, Uθ₂ = curl(Ψ₂,K);
 
   # for verifying the solution
   LW₂ = D²(W₂,K);
+  println("Verifying second-order oscillatory solution...")
   resid = ComplexFunc(r -> LW₂(r)+2im*p.Re*W₂(r)-g₀(r))
   println("Maximum residual on W₂ = ",maximum(abs.(resid.(range(1,5,length=10)))))
 
   # for verifying boundary conditions
   dΨ₂ = ComplexFunc(r -> derivative(Ψ₂,r))
   bcresid1 = Ψ₂(1)
-  bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+  # bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+
+  if RF == InertialFrame
+    bcresid2 = dΨ₂(1) - 0.5im*p.γ*Y(1)
+  elseif RF == CylinderFrame
+    bcresid2 = dΨ₂(1)
+  else 
+    error("Unknown reference frame type")
+  end
 
   println("BC residual on Ψ₂(1) = ",abs(bcresid1))
   println("BC residual on dΨ₂(1) = ",abs(bcresid2))
@@ -408,32 +488,32 @@ function uvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     sineval = y/r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur.(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ.(r)*exp.(-2im*t))*sin2eval
     return ur*coseval .- uθ*sineval
 end
 function vvelocity(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
+    coseval = x./r
+    sineval = y./r
     cos2eval = coseval^2-sineval^2
     sin2eval = 2*coseval*sineval
-    ur = real.(s.Ur(r)*exp.(-2im*t))*cos2eval
-    uθ = real.(s.Uθ(r)*exp.(-2im*t))*sin2eval
+    ur = real.(s.Ur.(r)*exp.(-2im*t))*cos2eval
+    uθ = real.(s.Uθ.(r)*exp.(-2im*t))*sin2eval
     return ur*sineval .+ uθ*coseval
 end
 function streamfunction(x,y,t,s::AsymptoticAnalytical{SecondOrder})
     r = sqrt(x^2+y^2)
-    coseval = x/r
-    sineval = y/r
+    coseval = x./r
+    sineval = y./r
     sin2eval = 2*coseval*sineval
-    return real(s.Ψ(r)*exp.(-2im*t))*sin2eval
+    return real.(s.Ψ.(r)*exp.(-2im*t))*sin2eval
 end
 
 ### all together
 
-StreamingAnalytical(p) = StreamingAnalytical(p,
-                  FirstOrderSoln(p),SecondOrderMeanSoln(p),SecondOrderSoln(p))
+StreamingAnalytical(p, RF::Type{<:ReferenceFrame}) = StreamingAnalytical(p,
+                  FirstOrderSoln(p, RF),SecondOrderMeanSoln(p, RF),SecondOrderSoln(p, RF))
 
 function Base.show(io::IO, s::StreamingAnalytical)
         println(io, "Analytical streaming flow solution for")
@@ -458,3 +538,97 @@ vvelocity(x,y,t,s::StreamingAnalytical) =
 
 streamfunction(x,y,t,s::StreamingAnalytical) =
       s.p.ϵ*streamfunction(x,y,t,s.s1) + s.p.ϵ^2*(streamfunction(x,y,s.s2s)+streamfunction(x,y,t,s.s2))
+
+# Drift velocity functions
+
+Ψ11(r, p::StreamingParams, ::Type{InertialFrame})  = -p.C./r
+Ψ11r(r, p::StreamingParams, ::Type{InertialFrame}) =  p.C./r.^2
+
+Ψ11(r, p::StreamingParams, ::Type{CylinderFrame})  = -r .- p.C./r
+Ψ11r(r, p::StreamingParams, ::Type{CylinderFrame}) = -1 .+ p.C./r.^2
+
+function drift_velocity(x1, y1, p::StreamingParams, RF::Type{<:ReferenceFrame}; x2=x1, y2=y1)
+    γ  = p.γ
+    C  = p.C
+    H₀ = p.H₀
+
+    Ψ11  = r -> zero(r)
+    Ψ11r = r -> zero(r)
+
+    if RF == InertialFrame
+        Ψ11  = r -> -C/r
+        Ψ11r = r ->  C/r^2
+    elseif RF == CylinderFrame
+        Ψ11  = r -> -r - C/r
+        Ψ11r = r -> -1 + C/r^2
+    else
+        error("Unknown reference frame type")
+    end
+
+    Ψ12(r)   = 2*hankelh1(1, γ*r) / (γ*hankelh1(0, γ))
+    Ψ1(r)    = Ψ11(r) + Ψ12(r)
+
+    Ψ12r(r)  = (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+    Ψ1r(r)   = Ψ11r(r) + Ψ12r(r)
+
+    Ψ11rr(r) = -2C/r^3
+    Ψ12rr(r) = -γ/(2H₀) * (3*hankelh1(1, γ*r) - hankelh1(3, γ*r))
+    Ψ1rr(r)  = Ψ11rr(r) + Ψ12rr(r)
+
+    U_r1(r)    = Ψ1(r)/r
+    U_θ1(r)    = -Ψ1r(r)
+
+    dUr1_dr(r) = (Ψ1r(r)*r - Ψ1(r)) / r^2
+    dUθ1_dr(r) = -Ψ1rr(r)
+
+    vdv_r(r, θ) =
+        conj(U_r1(r)) * dUr1_dr(r) * cos(θ)^2 -
+        conj(U_θ1(r))/r * U_r1(r) * sin(θ)^2 -
+        conj(U_θ1(r)) * U_θ1(r)/r * sin(θ)^2
+
+    vdv_θ(r, θ) =
+        conj(U_r1(r)) * dUθ1_dr(r) * cos(θ)*sin(θ) +
+        conj(U_θ1(r))/r * U_θ1(r) * cos(θ)*sin(θ) +
+        conj(U_θ1(r)) * U_r1(r)/r * cos(θ)*sin(θ)
+
+    vdv_u(r, θ) = vdv_r(r, θ)*cos(θ) - vdv_θ(r, θ)*sin(θ)
+    vdv_v(r, θ) = vdv_r(r, θ)*sin(θ) + vdv_θ(r, θ)*cos(θ)
+
+    vdv_u_xy(x, y) = vdv_u(hypot(x, y), atan(y, x))
+    vdv_v_xy(x, y) = vdv_v(hypot(x, y), atan(y, x))
+
+    return (0.5 * vdv_u_xy.(x1, y1), 0.5 * vdv_v_xy.(x2, y2))
+end
+
+function drift_streamfunction(x, y, p::StreamingParams)
+    γ  = p.γ
+    C  = p.C
+    H₀ = p.H₀
+
+    r = hypot.(x, y)
+    θ = atan.(y, x)
+
+    return 0.5 * imag((C./r.^2 - hankelh1.(2, γ*r)) .* conj(hankelh1.(0, γ*r) / H₀)) .* sin.(2θ)
+end
+
+# function drift_vorticty(x, y, p::StreamingParams)
+#     γ  = p.γ
+#     C  = p.C
+#     H₀ = p.H₀
+
+#     r = hypot.(x, y)
+#     θ = atan.(y, x)
+
+#     X(r) = hankelh1(0, γ*r) / H₀
+#     Z(r) = hankelh1(2, γ*r) / H₀
+#     Xr(r) = - γ * hankelh1(1, γ*r) / H₀
+#     Zr(r) = γ/2 * (hankelh1(1, γ*r) - hankelh1(3, γ*r)) / H₀
+#     Xrr(r) = -γ^2 / 2 * (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+#     Zrr(r) = -γ^2 / 4 * (hankelh1(0, γ*r) - hankelh1(2, γ*r)) / H₀
+
+#     sd(r) = 0.5 * (C / r^2 - Z(r)) * conj(X(r))
+#     sdr(r) = 0.5 * ((-2 * C ./ r.^3 - Zr(r)) .* conj(X(r)) + (C ./ r.^2 - Z(r)) .* conj(Xr(r)))
+#     sdr2(r) = 0.5 * ((6 * C ./ r.^4 - Zrr(r)) .* conj(X(r)) + 2 * (-2 * C ./ r.^3 - Zr(r)) .* conj(Xr(r)) + (C ./ r.^2 - Z(r)) .* conj(Xrr(r))) 
+
+#     return imag(sdr2(r) * sin(2θ) + 1/r * sdr(r) * sin(2θ) -4 / r^2 * sd(r) * sin(2θ))
+# end

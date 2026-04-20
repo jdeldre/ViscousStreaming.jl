@@ -1,5 +1,12 @@
 cache
 *.ipynb
+.DS_Store
 Manifest.toml
+notebooks/
 notebooks/*.jld
-notebooks/CFD_data
+
+# figures
+.png
+.pdf
+.jpeg
+.jpg

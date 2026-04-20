@@ -2,11 +2,12 @@ module ViscousStreaming
 
   using Reexport
   using SpecialFunctions
+  using UnPack
 
-  @reexport using ViscousFlow
-  #@reexport using ImmersedLayers
+  # @reexport using ViscousFlow
+  @reexport using ImmersedLayers
 
-  export params, StreamingParams, StreamingAnalytical, StreamingComputational
+  export params, StreamingParams, StreamingAnalytical, StreamingComputational, FlowField
 
   abstract type OrderType end
   abstract type FirstOrder <: OrderType end
@@ -16,6 +17,21 @@ module ViscousStreaming
   abstract type FlowType end
   abstract type FluidFlow <: FlowType end
   abstract type ParticleFlow <: FlowType end
+
+  """
+    FlowField(u1, u2, s1, s2, ω1, g, body)
+
+  A struct to hold the flow field information, including the first and second order velocity fields (u1, u2), the first and second order streaming fields (s1, s2), the first order vorticity field (ω1), the physical grid (g), and the body geometry (body).
+  """
+  struct FlowField
+    u1
+    u2
+    s1
+    s2
+    ω1
+    g
+    body
+  end
 
   """
       StreamingParams(ϵ,Re)
@@ -47,7 +63,7 @@ module ViscousStreaming
           StreamingParams(ϵ,Re,Ω,γ²,γ,λ,λ²,H₀,C)
       end
 
-  function Base.show(io::IO, p::StreamingParams) where {N}
+  function Base.show(io::IO, p::StreamingParams) 
           println(io, "Streaming flow parameters with Re = $(p.Re), ϵ = $(p.ϵ)")
   end
 
@@ -74,17 +90,17 @@ module ViscousStreaming
       Uθ :: ComplexFunc
   end
 
-  struct AsymptoticComputational{O <: OrderType, F <: FlowType, NX,NY}
-      Re :: Float64
-      ϵ :: Float64
-      Ω :: Float64
-      g :: PhysicalGrid{2}
-      W :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
-      Ψ :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
-      U :: Edges{Primal,NX,NY,ComplexF64}
-  end
+  # struct AsymptoticComputational{O <: OrderType, F <: FlowType, NX,NY}
+  #     Re :: Float64
+  #     ϵ :: Float64
+  #     Ω :: Float64
+  #     g :: PhysicalGrid{2}
+  #     W :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
+  #     Ψ :: Union{Nodes{Dual,NX,NY,ComplexF64},Nothing}
+  #     U :: Edges{Primal,NX,NY,ComplexF64}
+  # end
 
-  Base.size(::AsymptoticComputational{O,F,NX,NY}) where {O,F,NX,NY} = NX, NY
+  # Base.size(::AsymptoticComputational{O,F,NX,NY}) where {O,F,NX,NY} = NX, NY
 
   abstract type StreamingSolution end
 
@@ -95,26 +111,29 @@ module ViscousStreaming
     s2 :: AsymptoticAnalytical{SecondOrder}
   end
 
-  struct StreamingComputational{F <: FlowType} <: StreamingSolution
-    p :: StreamingParams
-    g :: PhysicalGrid{2}
-    s1 :: AsymptoticComputational{FirstOrder,F}
-    s̄2 :: AsymptoticComputational{SecondOrderMean,F}
-    sd :: AsymptoticComputational{SecondOrderMean,F}
-    s2 :: Union{AsymptoticComputational{SecondOrder,F},Nothing}
-
-  end
+  # struct StreamingComputational{F <: FlowType} <: StreamingSolution
+  #   p :: StreamingParams
+  #   g :: PhysicalGrid{2}
+  #   s1 :: AsymptoticComputational{FirstOrder,F}
+  #   s̄2 :: AsymptoticComputational{SecondOrderMean,F}
+  #   sd :: AsymptoticComputational{SecondOrderMean,F}
+  #   s2 :: Union{AsymptoticComputational{SecondOrder,F},Nothing}
+  # end
 
   params(s::T) where {T <: StreamingSolution} = s.p
 
-  #include("exact_onecylinder.jl")
+  include("exact_onecylinder.jl")
   #include("solver.jl")
   #include("frequency_domain.jl")
-  #include("inertialparticles.jl")
+  
   #include("displacement.jl")
   #include("averaging.jl")
   #include("trajectories.jl")
 
+  # new source codes
+  include("numerical.jl")
 
+  # placed here to use functions defined in numerical.jl
+  include("inertialparticles.jl")
 
 end # module
